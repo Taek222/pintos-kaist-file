@@ -140,6 +140,10 @@ void thread_tick(void)
 {
 	struct thread *t = thread_current();
 
+#ifdef DEBUG
+	//printf("%s - %lld tick\n", t->name, thread_ticks);
+#endif
+
 	/* Update statistics. */
 	if (t == idle_thread)
 		idle_ticks++;
