@@ -28,6 +28,9 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* Project 1 */
+static struct list sleep_list; // 1-1 Alarm clock
+
 #define DEBUG
 #include "my_debugHelper.c"
 
@@ -108,6 +111,7 @@ void thread_init(void)
 
 	/* Init the globla thread context */
 	lock_init(&tid_lock);
+	list_init(&sleep_list);
 	list_init(&ready_list);
 	list_init(&destruction_req);
 
@@ -633,4 +637,62 @@ allocate_tid(void)
 	lock_release(&tid_lock);
 
 	return tid;
+}
+
+/* Project 1 */
+// comparator for sorting priority in descending order
+bool prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+	struct thread *thA = list_entry(a, struct thread, elem);
+	struct thread *thB = list_entry(b, struct thread, elem);
+	return thA->priority >= thB->priority;
+};
+
+// 1-1 Alarm clock
+int find_minEndTick()
+{
+	struct list_elem *e;
+
+	int minEnd = INT32_MAX;
+	for (e = list_begin(&sleep_list); e != list_end(&sleep_list);
+		 e = list_next(e))
+	{
+		struct thread *f = list_entry(e, struct thread, elem);
+		minEnd = MIN(minEnd, f->endTick);
+	}
+
+	return minEnd == INT32_MAX ? -1 : minEnd;
+
+	// use list_min?
+}
+
+void sleep()
+{
+	struct thread *curr = thread_current();
+#ifdef DEBUG
+	//printf("[sleep] %s\n", curr->name);
+#endif
+
+	enum intr_level old_level;
+
+	void *none = NULL;
+
+	//ASSERT(!intr_context());
+
+	old_level = intr_disable();
+	if (curr != idle_thread)
+		list_insert_ordered(&ready_list, &curr->elem, prior_cmp, none);
+	thread_block();
+	intr_set_level(old_level);
+}
+
+void wake_up(struct thread *target)
+{
+	enum intr_level old_level;
+	old_level = intr_disable();
+
+	thread_unblock(target);
+	list_remove(&target->elem);
+
+	intr_set_level(old_level);
 }

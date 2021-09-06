@@ -10,6 +10,10 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 
+/* Project 1 */
+//static int64_t minEndTick;
+static struct thread *minEndThread; // better to just track thread itself?
+
 /* See [8254] for hardware details of the 8254 timer chip. */
 
 #if TIMER_FREQ < 19
@@ -108,14 +112,13 @@ void timer_sleep(int64_t ticks)
 	// 	thread_yield();
 
 	enum intr_level old_level;
-	while (timer_elapsed(start) < ticks)
+	if (timer_elapsed(start) < ticks)
 	{
-		if (!strcmp(curr->name, &"main"))
-		{
-			old_level = intr_disable();
-			thread_block();
-			intr_set_level(old_level);
-		}
+		//minEndTick = MIN(minEndTick, curr->endTick);
+
+		if (curr->endTick < minEndThread->endTick)
+			minEndThread = curr;
+		sleep();
 	}
 }
 
@@ -148,6 +151,10 @@ static void
 timer_interrupt(struct intr_frame *args UNUSED)
 {
 	ticks++;
+
+	if (minEndThread->endTick < ticks)
+		wake_up(minEndThread);
+
 	thread_tick();
 }
 
