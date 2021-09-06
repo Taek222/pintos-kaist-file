@@ -702,14 +702,15 @@ void wake_up(struct thread *target)
 	enum intr_level old_level = intr_disable();
 
 	// Unblock and remove from sleep_list
-	thread_unblock(target);
-	list_remove(&target->elem);
+	list_remove(&target->elem); // remove from 'sleep_list'
+	thread_unblock(target);		// unblock and add to 'ready_list'
+	target->endTick = -1;
 
 	// Update minEndThread
 	void *none = NULL;
 	struct list_elem *e = list_min(&sleep_list, endTick_cmp, none);
 	if (e != list_end(&sleep_list))
-		minEndThread = e;
+		minEndThread = list_entry(e, struct thread, elem);
 	else
 		minEndThread = NULL;
 
