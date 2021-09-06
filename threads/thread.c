@@ -678,6 +678,7 @@ void sleep()
 	void *none = NULL;
 
 	//ASSERT(!intr_context());
+	ASSERT(curr->status == THREAD_RUNNING);
 
 	old_level = intr_disable();
 	if (curr != idle_thread)
@@ -686,12 +687,31 @@ void sleep()
 	intr_set_level(old_level);
 }
 
+bool endTick_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+	struct thread *thA = list_entry(a, struct thread, elem);
+	struct thread *thB = list_entry(b, struct thread, elem);
+	return thA->endTick < thB->endTick;
+};
+
 void wake_up(struct thread *target)
 {
+	print_listContent(&ready_list);
+	print_listContent(&sleep_list);
+
 	enum intr_level old_level = intr_disable();
 
+	// Unblock and remove from sleep_list
 	thread_unblock(target);
 	list_remove(&target->elem);
+
+	// Update minEndThread
+	void *none = NULL;
+	struct list_elem *e = list_min(&sleep_list, endTick_cmp, none);
+	if (e != list_end(&sleep_list))
+		minEndThread = e;
+	else
+		minEndThread = NULL;
 
 	intr_set_level(old_level);
 }

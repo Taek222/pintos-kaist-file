@@ -9,6 +9,10 @@
 #include "vm/vm.h"
 #endif
 
+/* Project 1 */
+//static int64_t minEndTick;
+static struct thread *minEndThread = NULL; // better to just track thread itself?
+
 /* States in a thread's life cycle. */
 enum thread_status
 {
