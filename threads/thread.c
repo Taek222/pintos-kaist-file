@@ -681,15 +681,14 @@ void sleep()
 
 	old_level = intr_disable();
 	if (curr != idle_thread)
-		list_insert_ordered(&ready_list, &curr->elem, prior_cmp, none);
+		list_insert_ordered(&sleep_list, &curr->elem, prior_cmp, none);
 	thread_block();
 	intr_set_level(old_level);
 }
 
 void wake_up(struct thread *target)
 {
-	enum intr_level old_level;
-	old_level = intr_disable();
+	enum intr_level old_level = intr_disable();
 
 	thread_unblock(target);
 	list_remove(&target->elem);

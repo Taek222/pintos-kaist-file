@@ -12,7 +12,7 @@
 
 /* Project 1 */
 //static int64_t minEndTick;
-static struct thread *minEndThread; // better to just track thread itself?
+static struct thread *minEndThread = NULL; // better to just track thread itself?
 
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -114,9 +114,10 @@ void timer_sleep(int64_t ticks)
 	enum intr_level old_level;
 	if (timer_elapsed(start) < ticks)
 	{
-		//minEndTick = MIN(minEndTick, curr->endTick);
+		curr->endTick = start + ticks;
 
-		if (curr->endTick < minEndThread->endTick)
+		//minEndTick = MIN(minEndTick, curr->endTick);
+		if (minEndThread == NULL || curr->endTick < minEndThread->endTick)
 			minEndThread = curr;
 		sleep();
 	}
@@ -152,8 +153,12 @@ timer_interrupt(struct intr_frame *args UNUSED)
 {
 	ticks++;
 
-	if (minEndThread->endTick < ticks)
+	if (minEndThread != NULL && minEndThread->endTick < ticks)
+	{
+		ASSERT(minEndThread->status == THREAD_BLOCKED); // #ifdef DEBUG
+		printf("[timer_interrupt] wake up, %s! - endTick %d, now %d\n", minEndThread->name, minEndThread->endTick, ticks);
 		wake_up(minEndThread);
+	}
 
 	thread_tick();
 }
