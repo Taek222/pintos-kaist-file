@@ -215,7 +215,9 @@ tid_t thread_create(const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock(t);
-
+	if (thread_current()->priority < t->priority){
+	thread_yield();
+	}
 	return tid;
 }
 
@@ -250,7 +252,7 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
-	list_push_back(&ready_list, &t->elem);
+	list_insert_ordered(&ready_list, &t->elem, prior_cmp, NULL);
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
 }
@@ -319,7 +321,7 @@ void thread_yield(void)
 
 	old_level = intr_disable();
 	if (curr != idle_thread)
-		list_push_back(&ready_list, &curr->elem);
+		list_insert_ordered(&ready_list, &curr->elem, prior_cmp, NULL);
 	do_schedule(THREAD_READY);
 	intr_set_level(old_level);
 }
@@ -328,6 +330,7 @@ void thread_yield(void)
 void thread_set_priority(int new_priority)
 {
 	thread_current()->priority = new_priority;
+	list_sort(&ready_list, prior_cmp, NULL);
 }
 
 /* Returns the current thread's priority. */
@@ -642,6 +645,12 @@ allocate_tid(void)
 /* Project 1 */
 // 1-1 Alarm clock
 // comparator; sort by increasing endTick and decreasing priority
+bool prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+	struct thread *thA = list_entry(a, struct thread, elem);
+	struct thread *thB = list_entry(b, struct thread, elem);
+	return thA->priority >= thB->priority;
+};
 bool endTick_prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 	struct thread *thA = list_entry(a, struct thread, elem);
