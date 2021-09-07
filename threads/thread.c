@@ -694,12 +694,13 @@ bool endTick_cmp(const struct list_elem *a, const struct list_elem *b, void *aux
 	return thA->endTick < thB->endTick;
 };
 
-void wake_up(struct thread *target)
+// Wake-up target thread and return updated minEndThread
+struct thread *wake_up(struct thread *target)
 {
-	print_listContent(&ready_list);
-	print_listContent(&sleep_list);
+	//print_listContent(&ready_list);
+	//print_listContent(&sleep_list);
 
-	enum intr_level old_level = intr_disable();
+	ASSERT(intr_get_level() == INTR_OFF);
 
 	// Unblock and remove from sleep_list
 	list_remove(&target->elem); // remove from 'sleep_list'
@@ -709,10 +710,8 @@ void wake_up(struct thread *target)
 	// Update minEndThread
 	void *none = NULL;
 	struct list_elem *e = list_min(&sleep_list, endTick_cmp, none);
+	struct thread *res = NULL;
 	if (e != list_end(&sleep_list))
-		minEndThread = list_entry(e, struct thread, elem);
-	else
-		minEndThread = NULL;
-
-	intr_set_level(old_level);
+		res = list_entry(e, struct thread, elem);
+	return res;
 }

@@ -9,10 +9,6 @@
 #include "vm/vm.h"
 #endif
 
-/* Project 1 */
-//static int64_t minEndTick;
-static struct thread *minEndThread = NULL; // better to just track thread itself?
-
 /* States in a thread's life cycle. */
 enum thread_status
 {
@@ -152,9 +148,9 @@ int thread_get_load_avg(void);
 void do_iret(struct intr_frame *tf);
 
 /* Project 1 */
-int find_minEndTick(void);	   // 1-1 Alarm clock
-void sleep();				   // 1-1 Alarm clock
-void wake_up(struct thread *); // 1-1 Alarm clock
+int find_minEndTick(void);				 // 1-1 Alarm clock
+void sleep();							 // 1-1 Alarm clock
+struct thread *wake_up(struct thread *); // 1-1 Alarm clock
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 

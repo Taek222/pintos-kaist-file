@@ -19,6 +19,10 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
+/* Project 1 */
+//static int64_t minEndTick;
+static struct thread *minEndThread = NULL; // better to just track thread itself?
+
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -153,7 +157,12 @@ timer_interrupt(struct intr_frame *args UNUSED)
 	{
 		ASSERT(minEndThread->status == THREAD_BLOCKED); // #ifdef DEBUG
 		printf("[timer_interrupt] wake up, %s! - endTick %d, now %d\n", minEndThread->name, minEndThread->endTick, ticks);
-		wake_up(minEndThread);
+
+		enum intr_level old_level = intr_disable();
+
+		minEndThread = wake_up(minEndThread);
+
+		intr_set_level(old_level);
 	}
 
 	thread_tick();
