@@ -1,4 +1,4 @@
-#define DEBUG
+// #define DEBUG
 
 #include "devices/timer.h"
 #include <debug.h>
@@ -150,7 +150,7 @@ timer_interrupt(struct intr_frame *args UNUSED)
 {
 	ticks++;
 
-	if (minEndThread != NULL && minEndThread->endTick < ticks)
+	while (minEndThread != NULL && minEndThread->endTick <= ticks)
 	{
 		ASSERT(minEndThread->status == THREAD_BLOCKED);
 

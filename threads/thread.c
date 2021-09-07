@@ -31,7 +31,7 @@ static struct list ready_list;
 /* Project 1 */
 static struct list sleep_list; // 1-1 Alarm clock
 
-#define DEBUG
+// #define DEBUG
 #include "my_debugHelper.c"
 
 /* Idle thread. */
