@@ -330,7 +330,10 @@ void thread_yield(void)
 void thread_set_priority(int new_priority)
 {
 	thread_current()->priority = new_priority;
-	list_sort(&ready_list, prior_cmp, NULL);
+	struct thread *cand = list_entry(list_head(&ready_list), struct thread, elem);
+	if (new_priority < cand->priority){
+		thread_yield();
+	}
 }
 
 /* Returns the current thread's priority. */
