@@ -31,13 +31,12 @@ jobs:
 
       - name: Build pintos
         run: |
-          cd pintos-kaist/threads
+          cd threads
           make
       - run: echo "🎉 Build successful"
       
       - name: Run pintos
         run: |
-          cd pintos-kaist
           source ./activate
           cd threads/build
           pintos -- -q run alarm-single
