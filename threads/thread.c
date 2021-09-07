@@ -215,7 +215,9 @@ tid_t thread_create(const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock(t);
-
+	if (thread_current()->priority < t->priority){
+	thread_yield();
+	}
 	return tid;
 }
 
@@ -253,10 +255,6 @@ void thread_unblock(struct thread *t)
 	list_insert_ordered(&ready_list, &t->elem, prior_cmp, NULL);
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
-
-	if (thread_current()->priority < t->priority){
-	thread_yield();
-	}
 }
 
 /* Returns the name of the running thread. */
@@ -694,7 +692,9 @@ int64_t wake_up()
 	target = list_entry(list_pop_front(&sleep_list), struct thread, elem); // remove from 'sleep_list'
 	thread_unblock(target);												   // unblock and add to 'ready_list'
 	target->endTick = -1;
-
+	if (thread_current()->priority < t->priority){
+	thread_yield();
+	}
 	// Get new minEndThread and return (NULL if doesn't exist)
 	if (list_empty(&sleep_list))
 		return -1;
