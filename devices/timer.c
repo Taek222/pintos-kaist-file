@@ -20,8 +20,7 @@
 #endif
 
 /* Project 1 */
-//static int64_t minEndTick;
-static struct thread *minEndThread = NULL; // better to just track thread itself?
+static struct thread *minEndThread = NULL; // better to just track thread itself
 
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
@@ -105,18 +104,16 @@ void timer_sleep(int64_t ticks)
 	printf("[Timer] Thread %s, starting timer %lld\n", curr->name, ticks);
 #endif
 
-	int64_t start = timer_ticks();
+	int64_t start = timer_ticks(); // WATCH
+	// printf("%d, %d", ticks, start); #ifdef DEBUG
 
 	ASSERT(intr_get_level() == INTR_ON);
-	// while (timer_elapsed(start) < ticks)
-	// 	thread_yield();
 
 	enum intr_level old_level;
 	if (timer_elapsed(start) < ticks)
 	{
 		curr->endTick = start + ticks;
 
-		//minEndTick = MIN(minEndTick, curr->endTick);
 		if (minEndThread == NULL || curr->endTick < minEndThread->endTick)
 			minEndThread = curr;
 		sleep();
@@ -155,8 +152,11 @@ timer_interrupt(struct intr_frame *args UNUSED)
 
 	if (minEndThread != NULL && minEndThread->endTick < ticks)
 	{
-		ASSERT(minEndThread->status == THREAD_BLOCKED); // #ifdef DEBUG
+		ASSERT(minEndThread->status == THREAD_BLOCKED);
+
+#ifdef DEBUG
 		printf("[timer_interrupt] wake up, %s! - endTick %d, now %d\n", minEndThread->name, minEndThread->endTick, ticks);
+#endif
 
 		enum intr_level old_level = intr_disable();
 
