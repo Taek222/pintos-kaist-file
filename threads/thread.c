@@ -652,7 +652,7 @@ bool prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 	struct thread *thA = list_entry(a, struct thread, elem);
 	struct thread *thB = list_entry(b, struct thread, elem);
-	return thA->priority >= thB->priority;
+	return thA->priority > thB->priority;
 };
 bool endTick_prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
 {
