@@ -20,7 +20,7 @@
 #endif
 
 /* Project 1 */
-static struct thread *minEndThread = NULL; // better to just track thread itself
+static int64_t minEndTick = -1;
 
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
@@ -114,8 +114,8 @@ void timer_sleep(int64_t ticks)
 	{
 		curr->endTick = start + ticks;
 
-		if (minEndThread == NULL || curr->endTick < minEndThread->endTick)
-			minEndThread = curr;
+		if (minEndTick == -1 || curr->endTick < minEndTick)
+			minEndTick = curr->endTick;
 		sleep();
 	}
 }
@@ -150,17 +150,16 @@ timer_interrupt(struct intr_frame *args UNUSED)
 {
 	ticks++;
 
-	while (minEndThread != NULL && minEndThread->endTick <= ticks)
+	while (minEndTick != -1 && minEndTick <= ticks)
 	{
-		ASSERT(minEndThread->status == THREAD_BLOCKED);
 
 #ifdef DEBUG
-		printf("[timer_interrupt] wake up, %s! - endTick %d, now %d\n", minEndThread->name, minEndThread->endTick, ticks);
+		printf("[timer_interrupt] wake-up endTick %d, now %d\n", minEndTick, ticks);
 #endif
 
 		enum intr_level old_level = intr_disable();
 
-		minEndThread = wake_up(minEndThread);
+		minEndTick = wake_up();
 
 		intr_set_level(old_level);
 	}

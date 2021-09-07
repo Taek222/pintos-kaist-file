@@ -148,8 +148,8 @@ int thread_get_load_avg(void);
 void do_iret(struct intr_frame *tf);
 
 /* Project 1 */
-void sleep();							 // 1-1 Alarm clock
-struct thread *wake_up(struct thread *); // 1-1 Alarm clock
+void sleep(void);	   // 1-1 Alarm clock
+int64_t wake_up(void); // 1-1 Alarm clock
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 

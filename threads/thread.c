@@ -641,55 +641,52 @@ allocate_tid(void)
 
 /* Project 1 */
 // 1-1 Alarm clock
-// comparator for sorting priority in descending order
-bool prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
+// comparator; sort by increasing endTick and decreasing priority
+bool endTick_prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 	struct thread *thA = list_entry(a, struct thread, elem);
 	struct thread *thB = list_entry(b, struct thread, elem);
-	return thA->priority >= thB->priority;
-};
-// comparator for sorting endTick in increasing order
-bool endTick_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
-{
-	struct thread *thA = list_entry(a, struct thread, elem);
-	struct thread *thB = list_entry(b, struct thread, elem);
+	if (thA->endTick == thB->endTick)
+	{
+		return thA->priority > thB->priority;
+	}
 	return thA->endTick < thB->endTick;
 };
 
+// Block current thread, insert_ordered into sleep list - O(N)
 void sleep()
 {
 	struct thread *curr = thread_current();
 	enum intr_level old_level;
-
-	void *none = NULL;
 
 	//ASSERT(!intr_context());
 	ASSERT(curr->status == THREAD_RUNNING);
 
 	old_level = intr_disable();
 	if (curr != idle_thread)
-		list_push_back(&sleep_list, &curr->elem);
+		list_insert_ordered(&sleep_list, &curr->elem, endTick_prior_cmp, NULL);
 	thread_block();
 	intr_set_level(old_level);
 }
 
-// Wake-up target thread and return updated minEndThread
-struct thread *wake_up(struct thread *target)
+// Wake-up front thread in sleep list (sorted) and return next minEndTick - O(1)
+int64_t wake_up()
 {
 	//ASSERT(intr_context()); // wake_up should've been called by timer_interrupt
 	ASSERT(intr_get_level() == INTR_OFF);
-	ASSERT(target->status == THREAD_BLOCKED);
 
 	// Unblock and remove target from sleep_list
-	list_remove(&target->elem); // remove from 'sleep_list'
-	thread_unblock(target);		// unblock and add to 'ready_list'
+	struct thread *target;
+	target = list_entry(list_pop_front(&sleep_list), struct thread, elem); // remove from 'sleep_list'
+	thread_unblock(target);												   // unblock and add to 'ready_list'
 	target->endTick = -1;
 
 	// Get new minEndThread and return (NULL if doesn't exist)
-	void *none = NULL;
-	struct list_elem *e = list_min(&sleep_list, endTick_cmp, none);
-	struct thread *res = NULL;
-	if (e != list_end(&sleep_list))
-		res = list_entry(e, struct thread, elem);
-	return res;
+	if (list_empty(&sleep_list))
+		return -1;
+	else
+	{
+		struct thread *th = list_entry(list_front(&sleep_list), struct thread, elem);
+		return th->endTick;
+	}
 }
