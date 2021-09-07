@@ -692,7 +692,7 @@ int64_t wake_up()
 	target = list_entry(list_pop_front(&sleep_list), struct thread, elem); // remove from 'sleep_list'
 	thread_unblock(target);												   // unblock and add to 'ready_list'
 	target->endTick = -1;
-	if (thread_current()->priority < t->priority){
+	if (thread_current()->priority < target->priority){
 	thread_yield();
 	}
 	// Get new minEndThread and return (NULL if doesn't exist)
