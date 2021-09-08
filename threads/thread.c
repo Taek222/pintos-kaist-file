@@ -468,6 +468,9 @@ init_thread(struct thread *t, const char *name, int priority)
 	// 1-3
 	t->basePrior = priority;
 	t->donatedPrior = -1;
+	t->waiting_lock = NULL;
+	//t->donors = malloc(sizeof(struct list));
+	list_init(&t->donors);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -742,3 +745,39 @@ int64_t wake_up()
 }
 
 // 1-3
+// Start from thread 't', donate 'new_prior' down the nested lock
+void donateNested(struct thread *t, int new_prior)
+{
+	if (t->waiting_lock == NULL || t->waiting_lock == 0)
+	{
+		list_sort(&ready_list, prior_cmp, NULL);
+		return;
+	}
+
+	struct thread *nxt = t->waiting_lock->holder; // next nested thread to donate
+	if (nxt->donatedPrior < new_prior)
+	{
+		nxt->donatedPrior = new_prior;
+		nxt->priority = MAX(nxt->basePrior, nxt->donatedPrior);
+		donateNested(nxt, new_prior);
+	}
+	// if nested thread with higher donatedPrior met, return
+	// Because that thread should've donated higher priority down already
+}
+
+void donateMultiple(struct thread *curr)
+{
+	int maxDonation = -1;
+
+	// prior_cmp sorts by 'decreasing' priority, so use 'list_min', not 'list_max'
+	struct list_elem *e = list_min(&curr->donors, prior_cmp, NULL);
+
+	if (e != list_tail(&curr->donors))
+	{
+		struct thread *t = list_entry(e, struct thread, elem);
+		maxDonation = t->priority;
+	}
+
+	curr->donatedPrior = maxDonation;
+	curr->priority = MAX(curr->basePrior, curr->donatedPrior);
+}

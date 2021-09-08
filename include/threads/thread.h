@@ -98,7 +98,8 @@ struct thread
 	int basePrior, donatedPrior; // 1-3 Priority donation
 	// bool isDonationHigher; // alternative to save stack
 	struct lock *waiting_lock; // 1-3 lock waiting for (nested-donation)
-	struct list *donors;	   // 1-3 remember the donors (multiple-donation)
+	struct list donors;
+	//struct list *donors;	   // 1-3 remember the donors (multiple-donation)
 	// !! Pointer to list, not list itself !!
 
 	/* Shared between thread.c and synch.c. */
@@ -162,6 +163,6 @@ int64_t wake_up(void); // 1-1 Alarm clock
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 // 1-3 Priority donation
-void donateNested(struct thread *t);   // start from thread newly added to the end of nested lock
-void donateMultiple(struct thread *t); // start from core thread getting donation (search through list 'donor')
-#endif								   /* threads/thread.h */
+void donateNested(struct thread *t, int new_prior); // start from thread newly added to the end of nested lock
+void donateMultiple(struct thread *curr);			// start from core thread getting donation (search through list 'donor')
+#endif												/* threads/thread.h */
