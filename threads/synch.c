@@ -42,13 +42,6 @@ struct semaphore_elem
 	struct semaphore semaphore; /* This semaphore. */
 };
 
-// bool prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
-// {
-// 	struct thread *thA = list_entry(a, struct thread, elem);
-// 	struct thread *thB = list_entry(b, struct thread, elem);
-// 	return thA->priority > thB->priority;
-// };
-
 bool sem_prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 	struct semaphore_elem *waitA = list_entry(a, struct semaphore_elem, elem);
@@ -149,12 +142,9 @@ void sema_up(struct semaphore *sema)
 
 	sema->value++;
 
-	//CRITICAL
+	// Preempt running thread if it has lower priority than unblocked thread
 	if (th != NULL && thread_current()->priority < th->priority)
-	{
-		//intr_set_level(old_level); // allow new thread to preempt current thread
 		thread_yield();
-	}
 
 	intr_set_level(old_level);
 }
@@ -321,9 +311,6 @@ void cond_wait(struct condition *cond, struct lock *lock)
 
 	sema_init(&waiter.semaphore, 0);
 
-	// waiter.semaphore is empty until sema down - cannot compare
-	//list_insert_ordered(&cond->waiters, &waiter.elem, sem_prior_cmp, NULL);
-
 	list_push_back(&cond->waiters, &waiter.elem); // just push back and sort in cond_signal
 
 	lock_release(lock);
@@ -345,18 +332,8 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED)
 	ASSERT(!intr_context());
 	ASSERT(lock_held_by_current_thread(lock));
 
-#ifdef DEBUG
-	struct list *target_list = &cond->waiters;
-	for (struct list_elem *e = list_begin(target_list); e != list_end(target_list);
-		 e = list_next(e))
-	{
-		struct semaphore_elem *semElem = list_entry(e, struct semaphore_elem, elem);
-		struct thread *f = list_entry(list_front(&semElem->semaphore.waiters), struct thread, elem);
-		printf("%s\n", f->name);
-	}
-#endif
+	list_sort(&cond->waiters, sem_prior_cmp, NULL); // cond_wait push_backs sem_elements
 
-	list_sort(&cond->waiters, sem_prior_cmp, NULL);
 	if (!list_empty(&cond->waiters))
 		sema_up(&list_entry(list_pop_front(&cond->waiters),
 							struct semaphore_elem, elem)

@@ -215,6 +215,8 @@ tid_t thread_create(const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock(t);
+
+	// Project 1-2 - check for preemption by new thread
 	if (thread_current()->priority < t->priority)
 	{
 		thread_yield();
