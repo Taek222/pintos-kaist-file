@@ -238,7 +238,7 @@ void lock_acquire(struct lock *lock)
 
 		// Add curr to donors list and call donateNested
 		struct thread *donee = lock->holder;
-		list_push_back(&donee->donors, &curr->elem);
+		list_push_back(&donee->donors, &curr->d_elem);
 		donateNested(curr, curr->priority);
 
 		// sort ready_list?
@@ -287,16 +287,19 @@ void lock_release(struct lock *lock)
 	// 1-3
 	// Check donors lsit and remove any threads waiting for the 'lock'
 	struct list *donor_list = &curr->donors;
-	for (struct list_elem *e = list_begin(donor_list);
-		 e != list_end(donor_list);)
+	for (struct list_elem *de = list_begin(donor_list);
+		 de != list_end(donor_list);)
 	{
-		struct thread *donor = list_entry(e, struct thread, elem);
+		struct thread *donor = list_entry(de, struct thread, d_elem);
 
 		// lock is released, so donors waiting on the same lock are released too
 		if (donor->waiting_lock == lock)
-			e = list_remove(e);
+		{
+			donor->waiting_lock = NULL;
+			de = list_remove(de);
+		}
 		else
-			e = list_next(e);
+			de = list_next(de);
 	}
 
 	if (list_empty(donor_list))

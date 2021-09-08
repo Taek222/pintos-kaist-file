@@ -101,9 +101,10 @@ struct thread
 	struct list donors;
 	//struct list *donors;	   // 1-3 remember the donors (multiple-donation)
 	// !! Pointer to list, not list itself !!
+	struct list_elem d_elem; //1-3 used to put thread into 'donors' list
 
 	/* Shared between thread.c and synch.c. */
-	struct list_elem elem; /* List element. */
+	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

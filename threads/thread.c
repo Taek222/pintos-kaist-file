@@ -755,7 +755,7 @@ void donateNested(struct thread *t, int new_prior)
 	}
 
 	struct thread *nxt = t->waiting_lock->holder; // next nested thread to donate
-	if (nxt->donatedPrior < new_prior)
+	if (nxt->priority < new_prior)
 	{
 		nxt->donatedPrior = new_prior;
 		nxt->priority = MAX(nxt->basePrior, nxt->donatedPrior);
@@ -765,16 +765,17 @@ void donateNested(struct thread *t, int new_prior)
 	// Because that thread should've donated higher priority down already
 }
 
+// check any donor threads for current thread and find max donation
+// if donors list is empty, then init val -1 is set
 void donateMultiple(struct thread *curr)
 {
 	int maxDonation = -1;
 
-	// prior_cmp sorts by 'decreasing' priority, so use 'list_min', not 'list_max'
-	struct list_elem *e = list_min(&curr->donors, prior_cmp, NULL);
-
-	if (e != list_tail(&curr->donors))
+	if (!list_empty(&curr->donors))
 	{
-		struct thread *t = list_entry(e, struct thread, elem);
+		// prior_cmp sorts by 'decreasing' priority, so use 'list_min', not 'list_max'
+		struct list_elem *de = list_min(&curr->donors, prior_cmp, NULL);
+		struct thread *t = list_entry(de, struct thread, d_elem);
 		maxDonation = t->priority;
 	}
 
