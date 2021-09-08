@@ -42,6 +42,8 @@ struct semaphore_elem
 	struct semaphore semaphore; /* This semaphore. */
 };
 
+// comparator for sorting by decreasing priority.
+// Takes semaphore_elem elem (has only one thread in its block list)
 bool sem_prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 	struct semaphore_elem *waitA = list_entry(a, struct semaphore_elem, elem);
@@ -87,7 +89,7 @@ void sema_down(struct semaphore *sema)
 	old_level = intr_disable();
 	while (sema->value == 0)
 	{
-		list_insert_ordered(&sema->waiters, &thread_current()->elem, prior_cmp, NULL);
+		list_insert_ordered(&sema->waiters, &thread_current()->elem, prior_cmp, NULL); // 1-2
 		thread_block();
 	}
 	sema->value--;
@@ -131,7 +133,7 @@ void sema_up(struct semaphore *sema)
 
 	old_level = intr_disable();
 
-	list_sort(&sema->waiters, prior_cmp, NULL);
+	list_sort(&sema->waiters, prior_cmp, NULL); // 1-2
 	struct thread *th = NULL;
 	if (!list_empty(&sema->waiters))
 	{
@@ -142,7 +144,7 @@ void sema_up(struct semaphore *sema)
 
 	sema->value++;
 
-	// Preempt running thread if it has lower priority than unblocked thread
+	// 1-2 Preempt running thread if it has lower priority than unblocked thread
 	if (th != NULL && thread_current()->priority < th->priority)
 		thread_yield();
 
@@ -311,7 +313,7 @@ void cond_wait(struct condition *cond, struct lock *lock)
 
 	sema_init(&waiter.semaphore, 0);
 
-	list_push_back(&cond->waiters, &waiter.elem); // just push back and sort in cond_signal
+	list_push_back(&cond->waiters, &waiter.elem); // 1-2 just push back and sort in cond_signal
 
 	lock_release(lock);
 	sema_down(&waiter.semaphore);
@@ -332,7 +334,7 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED)
 	ASSERT(!intr_context());
 	ASSERT(lock_held_by_current_thread(lock));
 
-	list_sort(&cond->waiters, sem_prior_cmp, NULL); // cond_wait push_backs sem_elements
+	list_sort(&cond->waiters, sem_prior_cmp, NULL); // 1-2 cond_wait push_backs sem_elements
 
 	if (!list_empty(&cond->waiters))
 		sema_up(&list_entry(list_pop_front(&cond->waiters),

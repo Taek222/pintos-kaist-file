@@ -256,7 +256,7 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
-	list_insert_ordered(&ready_list, &t->elem, prior_cmp, NULL);
+	list_insert_ordered(&ready_list, &t->elem, prior_cmp, NULL); // 1-2
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
 }
@@ -325,12 +325,13 @@ void thread_yield(void)
 
 	old_level = intr_disable();
 	if (curr != idle_thread)
-		list_insert_ordered(&ready_list, &curr->elem, prior_cmp, NULL);
+		list_insert_ordered(&ready_list, &curr->elem, prior_cmp, NULL); // 1-2
 	do_schedule(THREAD_READY);
 	intr_set_level(old_level);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+// 1-2
 void thread_set_priority(int new_priority)
 {
 	thread_current()->priority = new_priority;
@@ -656,13 +657,15 @@ allocate_tid(void)
 
 /* Project 1 */
 // 1-1 Alarm clock
-// comparator; sort by increasing endTick and decreasing priority
+// comparator; sort by decreasing priority
 bool prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 	struct thread *thA = list_entry(a, struct thread, elem);
 	struct thread *thB = list_entry(b, struct thread, elem);
 	return thA->priority > thB->priority;
 };
+
+// comparator; sort by increasing endTick and decreasing priority
 bool endTick_prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 	struct thread *thA = list_entry(a, struct thread, elem);
@@ -674,7 +677,7 @@ bool endTick_prior_cmp(const struct list_elem *a, const struct list_elem *b, voi
 	return thA->endTick < thB->endTick;
 };
 
-// Block current thread, insert_ordered into sleep list - O(N)
+// 1-1 Block current thread, insert_ordered into sleep list - O(N)
 void sleep()
 {
 	struct thread *curr = thread_current();
@@ -690,7 +693,7 @@ void sleep()
 	intr_set_level(old_level);
 }
 
-// Wake-up front thread in sleep list (sorted) and return next minEndTick - O(1)
+// 1-1 Wake-up front thread in sleep list (sorted) and return next minEndTick - O(1)
 int64_t wake_up()
 {
 	//ASSERT(intr_context()); // wake_up should've been called by timer_interrupt
@@ -702,11 +705,12 @@ int64_t wake_up()
 	thread_unblock(target);												   // unblock and add to 'ready_list'
 	target->endTick = -1;
 
+	// 1-2 Q. How to preempt after waking thread up?
 	// if (thread_current()->priority < target->priority){
 	// 	thread_yield();
 	// }
-	// Get new minEndThread and return (NULL if doesn't exist)
 
+	// Get new minEndTick and return (-1 if no more threads sleeping)
 	if (list_empty(&sleep_list))
 		return -1;
 	else

@@ -94,7 +94,8 @@ struct thread
 	int priority;			   /* Priority. */
 
 	/* Project 1 */
-	int endTick; // 1-1 Alarm clock
+	int realPrior; // 1-3 Priority donation
+	int endTick;   // 1-1 Alarm clock
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; /* List element. */
@@ -148,6 +149,7 @@ int thread_get_load_avg(void);
 void do_iret(struct intr_frame *tf);
 
 /* Project 1 */
+// comparator for sorting by decreasing priority. Takes thread elem.
 bool prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux);
 bool endTick_prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux);
 void sleep(void);	   // 1-1 Alarm clock
