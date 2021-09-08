@@ -148,6 +148,8 @@ int thread_get_load_avg(void);
 void do_iret(struct intr_frame *tf);
 
 /* Project 1 */
+bool prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux);
+bool endTick_prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux);
 void sleep(void);	   // 1-1 Alarm clock
 int64_t wake_up(void); // 1-1 Alarm clock
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
