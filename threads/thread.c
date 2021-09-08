@@ -334,7 +334,22 @@ void thread_yield(void)
 // 1-2
 void thread_set_priority(int new_priority)
 {
-	thread_current()->priority = new_priority;
+
+	// Q. Turn-off interrupt?
+	// old_level = intr_disable();
+	// intr_set_level(old_level);
+
+	// enum intr_level old_level = intr_disable();
+
+	// // 1-3
+	enum intr_level old_level = intr_disable();
+
+	struct thread *curr = thread_current();
+	curr->basePrior = new_priority;
+	curr->priority = MAX(curr->basePrior, curr->donatedPrior);
+	// Q. 더 낮은 priority로 바꾸면 씹히는거 맞지?
+
+	intr_set_level(old_level);
 
 	if (list_size(&ready_list))
 	{
@@ -344,6 +359,8 @@ void thread_set_priority(int new_priority)
 			thread_yield();
 		}
 	}
+
+	//intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -447,6 +464,13 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	// 1-3
+	t->basePrior = priority;
+	t->donatedPrior = -1;
+	t->waiting_lock = NULL;
+	//t->donors = malloc(sizeof(struct list));
+	list_init(&t->donors);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -718,4 +742,43 @@ int64_t wake_up()
 		struct thread *th = list_entry(list_front(&sleep_list), struct thread, elem);
 		return th->endTick;
 	}
+}
+
+// 1-3
+// Start from thread 't', donate 'new_prior' down the nested lock
+void donateNested(struct thread *t, int new_prior)
+{
+	if (t->waiting_lock == NULL || t->waiting_lock == 0)
+	{
+		list_sort(&ready_list, prior_cmp, NULL);
+		return;
+	}
+
+	struct thread *nxt = t->waiting_lock->holder; // next nested thread to donate
+	if (nxt->priority < new_prior)
+	{
+		nxt->donatedPrior = new_prior;
+		nxt->priority = MAX(nxt->basePrior, nxt->donatedPrior);
+		donateNested(nxt, new_prior);
+	}
+	// if nested thread with higher donatedPrior met, return
+	// Because that thread should've donated higher priority down already
+}
+
+// check any donor threads for current thread and find max donation
+// if donors list is empty, then init val -1 is set
+void donateMultiple(struct thread *curr)
+{
+	int maxDonation = -1;
+
+	if (!list_empty(&curr->donors))
+	{
+		// prior_cmp sorts by 'decreasing' priority, so use 'list_min', not 'list_max'
+		struct list_elem *de = list_min(&curr->donors, prior_cmp, NULL);
+		struct thread *t = list_entry(de, struct thread, d_elem);
+		maxDonation = t->priority;
+	}
+
+	curr->donatedPrior = maxDonation;
+	curr->priority = MAX(curr->basePrior, curr->donatedPrior);
 }
