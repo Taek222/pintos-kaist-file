@@ -334,7 +334,22 @@ void thread_yield(void)
 // 1-2
 void thread_set_priority(int new_priority)
 {
-	thread_current()->priority = new_priority;
+
+	// Q. Turn-off interrupt?
+	// old_level = intr_disable();
+	// intr_set_level(old_level);
+
+	// enum intr_level old_level = intr_disable();
+
+	// // 1-3
+	enum intr_level old_level = intr_disable();
+
+	struct thread *curr = thread_current();
+	curr->basePrior = new_priority;
+	curr->priority = MAX(curr->basePrior, curr->donatedPrior);
+	// Q. 더 낮은 priority로 바꾸면 씹히는거 맞지?
+
+	intr_set_level(old_level);
 
 	if (list_size(&ready_list))
 	{
@@ -344,6 +359,8 @@ void thread_set_priority(int new_priority)
 			thread_yield();
 		}
 	}
+
+	//intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -447,6 +464,10 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	// 1-3
+	t->basePrior = priority;
+	t->donatedPrior = -1;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -719,3 +740,5 @@ int64_t wake_up()
 		return th->endTick;
 	}
 }
+
+// 1-3
