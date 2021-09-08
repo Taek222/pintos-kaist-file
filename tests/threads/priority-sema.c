@@ -40,6 +40,5 @@ static void
 priority_sema_thread(void *aux UNUSED)
 {
   sema_down(&sema);
-  printf("--%s--", thread_current()->name);
   msg("Thread %s woke up.", thread_name());
 }

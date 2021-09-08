@@ -1,3 +1,5 @@
+//#define DEBUG
+
 /* This file is derived from source code for the Nachos
    instructional operating system.  The Nachos copyright notice
    is reproduced in full below. */
@@ -40,21 +42,20 @@ struct semaphore_elem
 	struct semaphore semaphore; /* This semaphore. */
 };
 
-bool prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
-{
-	struct thread *thA = list_entry(a, struct thread, elem);
-	struct thread *thB = list_entry(b, struct thread, elem);
-	return thA->priority > thB->priority;
-};
+// bool prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
+// {
+// 	struct thread *thA = list_entry(a, struct thread, elem);
+// 	struct thread *thB = list_entry(b, struct thread, elem);
+// 	return thA->priority > thB->priority;
+// };
 
 bool sem_prior_cmp(const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 	struct semaphore_elem *waitA = list_entry(a, struct semaphore_elem, elem);
 	struct semaphore_elem *waitB = list_entry(b, struct semaphore_elem, elem);
-	struct thread *thA = list_front(&waitA->semaphore.waiters);
-	struct thread *thB = list_front(&waitB->semaphore.waiters);
+	struct thread *thA = list_entry(list_front(&waitA->semaphore.waiters), struct thread, elem);
+	struct thread *thB = list_entry(list_front(&waitB->semaphore.waiters), struct thread, elem);
 	return thA->priority > thB->priority;
-	return true;
 };
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
@@ -138,11 +139,23 @@ void sema_up(struct semaphore *sema)
 	old_level = intr_disable();
 
 	list_sort(&sema->waiters, prior_cmp, NULL);
-
+	struct thread *th = NULL;
 	if (!list_empty(&sema->waiters))
-		thread_unblock(list_entry(list_pop_front(&sema->waiters),
-								  struct thread, elem));
+	{
+		th = list_entry(list_pop_front(&sema->waiters),
+						struct thread, elem);
+		thread_unblock(th);
+	}
+
 	sema->value++;
+
+	//CRITICAL
+	if (th != NULL && thread_current()->priority < th->priority)
+	{
+		//intr_set_level(old_level); // allow new thread to preempt current thread
+		thread_yield();
+	}
+
 	intr_set_level(old_level);
 }
 
@@ -307,7 +320,12 @@ void cond_wait(struct condition *cond, struct lock *lock)
 	ASSERT(lock_held_by_current_thread(lock));
 
 	sema_init(&waiter.semaphore, 0);
-	list_insert_ordered(&cond->waiters, &waiter.elem, sem_prior_cmp, NULL);
+
+	// waiter.semaphore is empty until sema down - cannot compare
+	//list_insert_ordered(&cond->waiters, &waiter.elem, sem_prior_cmp, NULL);
+
+	list_push_back(&cond->waiters, &waiter.elem); // just push back and sort in cond_signal
+
 	lock_release(lock);
 	sema_down(&waiter.semaphore);
 	lock_acquire(lock);
@@ -327,8 +345,18 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED)
 	ASSERT(!intr_context());
 	ASSERT(lock_held_by_current_thread(lock));
 
-	list_sort(&cond->waiters, sem_prior_cmp, NULL);
+#ifdef DEBUG
+	struct list *target_list = &cond->waiters;
+	for (struct list_elem *e = list_begin(target_list); e != list_end(target_list);
+		 e = list_next(e))
+	{
+		struct semaphore_elem *semElem = list_entry(e, struct semaphore_elem, elem);
+		struct thread *f = list_entry(list_front(&semElem->semaphore.waiters), struct thread, elem);
+		printf("%s\n", f->name);
+	}
+#endif
 
+	list_sort(&cond->waiters, sem_prior_cmp, NULL);
 	if (!list_empty(&cond->waiters))
 		sema_up(&list_entry(list_pop_front(&cond->waiters),
 							struct semaphore_elem, elem)
