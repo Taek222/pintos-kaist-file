@@ -106,6 +106,8 @@ struct thread
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list
 
+	int nice;
+	int recent_cpu;
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */
@@ -166,4 +168,12 @@ int64_t wake_up(void); // 1-1 Alarm clock
 // 1-3 Priority donation
 void donateNested(struct thread *t, int new_prior); // start from thread newly added to the end of nested lock
 void donateMultiple(struct thread *curr);			// start from core thread getting donation (search through list 'donor')
-#endif												/* threads/thread.h */
+
+// 1-4 Advanced scheduler
+void total_update_recentcpu();
+void thread_update_recentcpu(struct thread *t);
+void update_load_avg();
+void total_update_priority();
+int load_avg;
+
+#endif /* threads/thread.h */

@@ -165,6 +165,9 @@ timer_interrupt(struct intr_frame *args UNUSED)
 	}
 
 	thread_tick();
+	if (thread_mlfqs && (ticks % TIMER_FREQ == 0))
+		total_update_recentcpu();
+		update_load_avg();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
