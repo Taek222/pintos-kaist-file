@@ -825,7 +825,7 @@ void total_update_recentcpu()
 // update single thread's recent_cpu
 void thread_update_recentcpu(struct thread *t)
 {
-	t->recent_cpu = ((2 * load_avg) * t->recent_cpu / (2 * load_avg + f) + (t->nice * f)); //coefficient will be zero in this calculation order -> how to prevent this and overflow together?
+	t->recent_cpu = (((2 * load_avg) * 100 / (2 * load_avg + f) * t->recent_cpu / 100) + (t->nice * f)); //coefficient will be zero in this calculation order -> how to prevent this and overflow together?
 }
 // update load_avg value
 void update_load_avg()
