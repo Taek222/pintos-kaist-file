@@ -402,14 +402,14 @@ int thread_get_nice(void)
 int thread_get_load_avg(void)
 {
 	/* TODO: Your implementation goes here */
-	return (load_avg * 100 / f);
+	return ((load_avg * 100 + (f/2)) / f);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void)
 {
 	/* TODO: Your implementation goes here */
-	return ((thread_current()->recent_cpu) * 100 / f);
+	return (thread_current()->recent_cpu >= 0) ? (((thread_current()->recent_cpu) * 100 + (f/2)) / f) : (((thread_current()->recent_cpu) * 100 - (f/2)) / f);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -831,6 +831,8 @@ void thread_update_recentcpu(struct thread *t)
 void update_load_avg()
 {
 	load_avg = (59*load_avg + (list_size(&ready_list) * f)) / 60;
+	if (thread_current() != idle_thread)
+		load_avg += f/60;
 }
 // update every thread's priority. this function would be called just before thread_tick so we don't need to consider preemption
 void total_update_priority()
