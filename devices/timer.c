@@ -163,15 +163,22 @@ timer_interrupt(struct intr_frame *args UNUSED)
 
 		intr_set_level(old_level);
 	}
-	// update mlfqs priority for every four ticks
-	if (thread_mlfqs && (ticks % 4 == 0)){
-		total_update_priority();
+
+	if (thread_mlfqs)
+	{
+		if (!(thread_name() == "idle")) 
+			thread_current()->recent_cpu += (2 << 14); //increase recent_cpu on each tick
+		// update mlfqs recent_cpu and load_avg for every seconds
+		if (ticks % TIMER_FREQ == 0)
+		{
+			update_load_avg();
+			total_update_recentcpu();
+		}
+		// update mlfqs priority for every four ticks
+		if (ticks % 4 == 0)
+			total_update_priority();
 	}
 	thread_tick();
-	// update mlfqs recent_cpu and load_avg for every seconds
-	if (thread_mlfqs && (ticks % TIMER_FREQ == 0))
-		total_update_recentcpu();
-		update_load_avg();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

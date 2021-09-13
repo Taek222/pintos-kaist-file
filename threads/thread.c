@@ -165,8 +165,6 @@ void thread_tick(void)
 #endif
 	else
 		kernel_ticks++;
-	if (thread_mlfqs && !(t == idle_thread)) 
-		t->recent_cpu++; //increase recent_cpu on each tick
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return();
@@ -345,7 +343,7 @@ void thread_yield(void)
 // 1-2
 void thread_set_priority(int new_priority)
 {
-
+	ASSERT(!thread_mlfqs);
 	// Q. Turn-off interrupt?
 	// old_level = intr_disable();
 	// intr_set_level(old_level);
@@ -380,12 +378,13 @@ int thread_get_priority(void)
 	return thread_current()->priority;
 }
 
+int f = 2 << 14;
 /* Sets the current thread's nice value to NICE. */
 void thread_set_nice(int nice UNUSED)
 {
 	/* TODO: Your implementation goes here */
 	thread_current()->nice = nice;
-	thread_current()->priority = ((PRI_MAX << 14) - (thread_current()->recent_cpu / 4) - ((2 * nice) << 14)) >> 14;
+	thread_update_priority(thread_current());
 	struct thread *cand = list_entry(list_head(&ready_list), struct thread, elem);
 	if (thread_get_priority() < cand->priority){
 		thread_yield();
@@ -403,14 +402,14 @@ int thread_get_nice(void)
 int thread_get_load_avg(void)
 {
 	/* TODO: Your implementation goes here */
-	return (load_avg * 100 >> 14);
+	return (load_avg * 100 / f);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void)
 {
 	/* TODO: Your implementation goes here */
-	return ((thread_current()->recent_cpu) * 100 >> 14);
+	return ((thread_current()->recent_cpu) * 100 / f);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -826,12 +825,12 @@ void total_update_recentcpu()
 // update single thread's recent_cpu
 void thread_update_recentcpu(struct thread *t)
 {
-	t->recent_cpu = ((2 * load_avg) / (2 * load_avg + 1) * t->recent_cpu + (t->nice << 14)); //coefficient will be zero in this calculation order -> how to prevent this and overflow together?
+	t->recent_cpu = ((2 * load_avg) * t->recent_cpu / (2 * load_avg + f) + (t->nice * f)); //coefficient will be zero in this calculation order -> how to prevent this and overflow together?
 }
 // update load_avg value
 void update_load_avg()
 {
-	load_avg = (59*load_avg + (list_size(&ready_list) << 14)) / 60;
+	load_avg = (59*load_avg + (list_size(&ready_list) * f)) / 60;
 }
 // update every thread's priority. this function would be called just before thread_tick so we don't need to consider preemption
 void total_update_priority()
@@ -839,22 +838,27 @@ void total_update_priority()
 	enum intr_level old_level = intr_disable();
 
 	struct thread *t = thread_current();
-	t->priority = ((PRI_MAX << 14) - (t->recent_cpu / 4) - ((2 * t->nice) << 14)) >> 14;
+	thread_update_priority(t);
 
 	struct list_elem *e;
 	for (e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e)) {
 	struct thread *t = list_entry(e, struct thread, elem);
-		t->priority = ((PRI_MAX << 14) - (t->recent_cpu / 4) - ((2 * t->nice) << 14)) >> 14;
+		thread_update_priority(t);
 	}
 	// sorting ready_list again -> is list.sort preserves round-robin order?
 	list_sort(&ready_list, prior_cmp, NULL);
 
 	for (e = list_begin (&sleep_list); e != list_end (&sleep_list); e = list_next (e)) {
 	struct thread *t = list_entry(e, struct thread, elem);
-		t->priority = ((PRI_MAX << 14) - (t->recent_cpu / 4) - ((2 * t->nice) << 14)) >> 14;
+		thread_update_priority(t);
 	}
 	// sorting sleep_list again
 	list_sort(&sleep_list, endTick_prior_cmp, NULL);
 
 	intr_set_level(old_level);
+}
+// update single thread's priority
+void thread_update_priority(struct thread *t)
+{
+	t->priority = ((PRI_MAX * f) - (t->recent_cpu / 4) - ((2 * t->nice) * f)) / f;
 }
