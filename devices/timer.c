@@ -144,6 +144,9 @@ void timer_print_stats(void)
 	printf("Timer: %" PRId64 " ticks\n", timer_ticks());
 }
 
+// 1-4 fixed-point representation multiplier
+const int F = 1 << 14;
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt(struct intr_frame *args UNUSED)
@@ -166,8 +169,9 @@ timer_interrupt(struct intr_frame *args UNUSED)
 
 	if (thread_mlfqs)
 	{
-		if (!(thread_name() == "idle")) 
-			thread_current()->recent_cpu += (2 << 14); //increase recent_cpu on each tick
+		struct thread *t = thread_current();
+		if (!(thread_name() == "idle"))
+			t->recent_cpu += F; //increase recent_cpu on each tick
 		// update mlfqs recent_cpu and load_avg for every seconds
 		if (ticks % TIMER_FREQ == 0)
 		{
