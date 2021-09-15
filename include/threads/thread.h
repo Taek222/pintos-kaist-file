@@ -94,20 +94,21 @@ struct thread
 	int priority;			   /* Priority. */
 
 	/* Project 1 */
-	int endTick;				 // 1-1 Alarm clock
-	int basePrior, donatedPrior; // 1-3 Priority donation
-	// bool isDonationHigher; // alternative to save stack
+	int endTick; // 1-1 Alarm clock
+
+	// 1-3 Priority donation
+	int basePrior, donatedPrior;
 	struct lock *waiting_lock; // 1-3 lock waiting for (nested-donation)
-	struct list donors;
-	//struct list *donors;	   // 1-3 remember the donors (multiple-donation)
-	// !! Pointer to list, not list itself !!
-	struct list_elem d_elem; //1-3 used to put thread into 'donors' list
+	struct list donors;		   // 1-3 remember the donors (multiple-donation)
+	struct list_elem d_elem;   //1-3 used to put thread into 'donors' list
+
+	// 1-4 MLFQS
+	int nice;
+	int recent_cpu;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list
 
-	int nice;
-	int recent_cpu;
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */

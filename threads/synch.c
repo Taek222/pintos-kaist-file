@@ -230,8 +230,7 @@ void lock_acquire(struct lock *lock)
 	if (!thread_mlfqs)
 	{
 		// 1-3
-		// Q. interrupt disabled during donation??
-		enum intr_level old_level = intr_disable(); // Q
+		enum intr_level old_level = intr_disable();
 
 		// Failed to acquire lock
 		if (lock->semaphore.value == 0)
@@ -242,11 +241,9 @@ void lock_acquire(struct lock *lock)
 			struct thread *donee = lock->holder;
 			list_push_back(&donee->donors, &curr->d_elem);
 			donateNested(curr, curr->priority);
-
-			// sort ready_list?
 		}
 
-		intr_set_level(old_level); // Q
+		intr_set_level(old_level);
 	}
 
 	sema_down(&lock->semaphore);

@@ -99,17 +99,9 @@ timer_elapsed(int64_t then)
 void timer_sleep(int64_t ticks)
 {
 	struct thread *curr = thread_current();
-
-#ifdef DEBUG
-	printf("[Timer] Thread %s, starting timer %lld\n", curr->name, ticks);
-#endif
-
-	int64_t start = timer_ticks(); // WATCH
-	// printf("%d, %d", ticks, start); #ifdef DEBUG
-
+	int64_t start = timer_ticks();
 	ASSERT(intr_get_level() == INTR_ON);
 
-	enum intr_level old_level;
 	if (timer_elapsed(start) < ticks)
 	{
 		curr->endTick = start + ticks;
@@ -155,11 +147,6 @@ timer_interrupt(struct intr_frame *args UNUSED)
 
 	while (minEndTick != -1 && minEndTick <= ticks)
 	{
-
-#ifdef DEBUG
-		printf("[timer_interrupt] wake-up endTick %d, now %d\n", minEndTick, ticks);
-#endif
-
 		enum intr_level old_level = intr_disable();
 
 		minEndTick = wake_up();
@@ -172,16 +159,19 @@ timer_interrupt(struct intr_frame *args UNUSED)
 		struct thread *t = thread_current();
 		if (!(thread_name() == "idle"))
 			t->recent_cpu += F; //increase recent_cpu on each tick
+
 		// update mlfqs recent_cpu and load_avg for every seconds
 		if (ticks % TIMER_FREQ == 0)
 		{
 			update_load_avg();
 			total_update_recentcpu();
 		}
+
 		// update mlfqs priority for every four ticks
 		if (ticks % 4 == 0)
 			total_update_priority();
 	}
+
 	thread_tick();
 }
 
