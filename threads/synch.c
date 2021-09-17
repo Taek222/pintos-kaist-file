@@ -226,25 +226,25 @@ void lock_acquire(struct lock *lock)
 
 	struct thread *curr = thread_current();
 
-	// 1-3
-
-	// Q. interrupt disabled during donation??
-	enum intr_level old_level = intr_disable(); // Q
-
-	// Failed to acquire lock
-	if (lock->semaphore.value == 0)
+	// 1-4 Forbid donation
+	if (!thread_mlfqs)
 	{
-		curr->waiting_lock = lock; // I'm waiting on this lock
+		// 1-3
+		enum intr_level old_level = intr_disable();
 
-		// Add curr to donors list and call donateNested
-		struct thread *donee = lock->holder;
-		list_push_back(&donee->donors, &curr->d_elem);
-		donateNested(curr, curr->priority);
+		// Failed to acquire lock
+		if (lock->semaphore.value == 0)
+		{
+			curr->waiting_lock = lock; // I'm waiting on this lock
 
-		// sort ready_list?
+			// Add curr to donors list and call donateNested
+			struct thread *donee = lock->holder;
+			list_push_back(&donee->donors, &curr->d_elem);
+			donateNested(curr, curr->priority);
+		}
+
+		intr_set_level(old_level);
 	}
-
-	intr_set_level(old_level); // Q
 
 	sema_down(&lock->semaphore);
 	lock->holder = curr;
@@ -284,29 +284,33 @@ void lock_release(struct lock *lock)
 
 	struct thread *curr = thread_current();
 
-	// 1-3
-	// Check donors lsit and remove any threads waiting for the 'lock'
-	struct list *donor_list = &curr->donors;
-	for (struct list_elem *de = list_begin(donor_list);
-		 de != list_end(donor_list);)
+	// 1-4 Forbid donation
+	if (!thread_mlfqs)
 	{
-		struct thread *donor = list_entry(de, struct thread, d_elem);
-
-		// lock is released, so donors waiting on the same lock are released too
-		if (donor->waiting_lock == lock)
+		// 1-3
+		// Check donors lsit and remove any threads waiting for the 'lock'
+		struct list *donor_list = &curr->donors;
+		for (struct list_elem *de = list_begin(donor_list);
+			 de != list_end(donor_list);)
 		{
-			donor->waiting_lock = NULL;
-			de = list_remove(de);
+			struct thread *donor = list_entry(de, struct thread, d_elem);
+
+			// lock is released, so donors waiting on the same lock are released too
+			if (donor->waiting_lock == lock)
+			{
+				donor->waiting_lock = NULL;
+				de = list_remove(de);
+			}
+			else
+				de = list_next(de);
 		}
-		else
-			de = list_next(de);
+
+		if (list_empty(donor_list))
+			curr->donatedPrior = -1;
+
+		// Recalculate donation from remaining donors
+		donateMultiple(curr);
 	}
-
-	if (list_empty(donor_list))
-		curr->donatedPrior = -1;
-
-	// Recalculate donation from remaining donors
-	donateMultiple(curr);
 
 	lock->holder = NULL;
 	sema_up(&lock->semaphore);
