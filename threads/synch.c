@@ -145,7 +145,7 @@ void sema_up(struct semaphore *sema)
 	sema->value++;
 
 	// 1-2 Preempt running thread if it has lower priority than unblocked thread
-	if (th != NULL && thread_current()->priority < th->priority)
+	if (th != NULL && thread_current()->priority < th->priority && !(intr_context()))
 		thread_yield();
 
 	intr_set_level(old_level);
