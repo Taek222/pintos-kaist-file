@@ -94,14 +94,17 @@ struct thread
 	int priority;			   /* Priority. */
 
 	/* Project 1 */
-	int endTick;				 // 1-1 Alarm clock
-	int basePrior, donatedPrior; // 1-3 Priority donation
-	// bool isDonationHigher; // alternative to save stack
+	int endTick; // 1-1 Alarm clock
+
+	// 1-3 Priority donation
+	int basePrior, donatedPrior;
 	struct lock *waiting_lock; // 1-3 lock waiting for (nested-donation)
-	struct list donors;
-	//struct list *donors;	   // 1-3 remember the donors (multiple-donation)
-	// !! Pointer to list, not list itself !!
-	struct list_elem d_elem; //1-3 used to put thread into 'donors' list
+	struct list donors;		   // 1-3 remember the donors (multiple-donation)
+	struct list_elem d_elem;   //1-3 used to put thread into 'donors' list
+
+	// 1-4 MLFQS
+	int nice;
+	int recent_cpu;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list
@@ -166,4 +169,13 @@ int64_t wake_up(void); // 1-1 Alarm clock
 // 1-3 Priority donation
 void donateNested(struct thread *t, int new_prior); // start from thread newly added to the end of nested lock
 void donateMultiple(struct thread *curr);			// start from core thread getting donation (search through list 'donor')
-#endif												/* threads/thread.h */
+
+// 1-4 Advanced scheduler
+void total_update_recentcpu();
+void thread_update_recentcpu(struct thread *t);
+void update_load_avg();
+void total_update_priority();
+void thread_update_priority(struct thread *t);
+int load_avg;
+
+#endif /* threads/thread.h */
