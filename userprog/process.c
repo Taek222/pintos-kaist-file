@@ -204,8 +204,8 @@ int process_exec(void *f_name)
 	// Project 2-1. Pass args - load arguments onto the user stack
 	void **rspp = &_if.rsp;
 	load_userStack(argv, argc, rspp);
-	_if.R.rdi = 4;
-	_if.R.rsi = (uint64_t)*rspp + 8;
+	_if.R.rdi = argc;
+	_if.R.rsi = (uint64_t)*rspp + sizeof(void *);
 
 	hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true); // #ifdef DEBUG
 	// Q. ptr to number? -> convert to int, uint64_t
@@ -233,6 +233,7 @@ void load_userStack(char **argv, int argc, void **rspp)
 			(*rspp)--;
 			**(char **)rspp = individual_character; // 1 byte
 		}
+		argv[i] = *(char **)rspp; // push this address too
 	}
 
 	// 2. Word-align padding
