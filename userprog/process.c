@@ -186,7 +186,7 @@ int process_exec(void *f_name)
 	process_cleanup();
 
 	// Project 2-1. Pass args - parse
-	char *argv[10];
+	char *argv[30]; // Q. 테스트는 일단 통과, 사이즈 30이면 충분하겠지? 동적할당 안해도 되겠지?
 	int argc = 0;
 
 	char *token, *save_ptr;
@@ -201,17 +201,14 @@ int process_exec(void *f_name)
 	/* And then load the binary */
 	success = load(file_name, &_if);
 
-	void **rspp = &_if.rsp;
-	// (*rspp)--;
-	// **(char **)rspp = 'a';
-
 	// Project 2-1. Pass args - load arguments onto the user stack
+	void **rspp = &_if.rsp;
 	load_userStack(argv, argc, rspp);
 	_if.R.rdi = 4;
 	_if.R.rsi = (uint64_t)*rspp + 8;
 
 	hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true); // #ifdef DEBUG
-	// Q. ptr to number? -> conversion int, uint64_t
+	// Q. ptr to number? -> convert to int, uint64_t
 
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
@@ -234,7 +231,7 @@ void load_userStack(char **argv, int argc, void **rspp)
 		{
 			char individual_character = argv[i][j];
 			(*rspp)--;
-			**(char **)rspp = individual_character;
+			**(char **)rspp = individual_character; // 1 byte
 		}
 	}
 
@@ -243,7 +240,7 @@ void load_userStack(char **argv, int argc, void **rspp)
 	for (int k = 0; k < pad; k++)
 	{
 		(*rspp)--;
-		**(uint8_t **)rspp = (uint8_t)0;
+		**(uint8_t **)rspp = (uint8_t)0; // 1 byte
 	}
 
 	// 3. Pointers to the argument strings
