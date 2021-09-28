@@ -7,9 +7,19 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "threads/vaddr.h"
+#include "filesys/filesys.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
+
+void check_address(uaddr);
+static int64_t get_user (const uint8_t *uaddr);
+static bool put_user (uint8_t *udst, uint8_t byte);
+void halt (void);
+void exit (int status);
+bool create (const char *file, unsigned initial_size);
+bool remove (const char *file);
 
 /* System call.
  *
@@ -61,18 +71,83 @@ void syscall_handler(struct intr_frame *f UNUSED)
 
 	switch (f->R.rax)
 	{
+	case SYS_HALT:
+		halt();
+		break;
+	case SYS_EXIT:
+		exit(f->R.rdi);
+		break;
+	case SYS_CREATE:
+		f->R.rax = create(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_REMOVE:
+		f->R.rax = remove(f->R.rdi);
 	case SYS_WRITE:
 		halt(); // #ifdef DEBUG FOR TESTING
 		// args-single이나 halt나 exit이나 출력을 위해 write syscall을 사용하므로 잘 작동하는지 테스트
 		break;
 	default:
+		thread_exit();
 		break;
 	}
 
 	thread_exit();
 }
 
-void halt(void)
+/* Just check whether the address is under KERN_BASE */
+void check_address(uaddr)
+{
+	if (!(is_user_vaddr(uaddr))){
+		exit(-1);
+	}
+}
+
+/* Reads a byte at user virtual address UADDR.
+ * UADDR must be below KERN_BASE.
+ * Returns the byte value if successful, -1 if a segfault
+ * occurred. */
+static int64_t
+get_user (const uint8_t *uaddr) {
+    int64_t result;
+    __asm __volatile (
+    "movabsq $done_get, %0\n"
+    "movzbq %1, %0\n"
+    "done_get:\n"
+    : "=&a" (result) : "m" (*uaddr));
+    return result;
+}
+
+/* Writes BYTE to user address UDST.
+ * UDST must be below KERN_BASE.
+ * Returns true if successful, false if a segfault occurred. */
+static bool
+put_user (uint8_t *udst, uint8_t byte) {
+    int64_t error_code;
+    __asm __volatile (
+    "movabsq $done_put, %0\n"
+    "movb %b2, %1\n"
+    "done_put:\n"
+    : "=&a" (error_code), "=m" (*udst) : "q" (byte));
+    return error_code != -1;
+}
+
+void halt (void)
 {
 	power_off();
+}
+
+void exit (int status)
+{
+	printf("%s: exit(%d)\n", thread_name(), status);
+	thread_exit();
+}
+
+bool create (const char *file, unsigned initial_size)
+{
+	return filesys_create(file, initial_size);
+}
+
+bool remove (const char *file)
+{
+	return filesys_remove(file);
 }
