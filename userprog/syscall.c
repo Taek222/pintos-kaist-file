@@ -20,6 +20,8 @@ void halt (void);
 void exit (int status);
 bool create (const char *file, unsigned initial_size);
 bool remove (const char *file);
+int read (int fd, void *buffer, unsigned size);
+int write (int fd, const void *buffer, unsigned size);
 
 /* System call.
  *
@@ -48,7 +50,7 @@ void syscall_init(void)
 }
 
 /* The main system call interface */
-#define DEBUG
+// #define DEBUG
 void syscall_handler(struct intr_frame *f UNUSED)
 {
 	// TODO: Your implementation goes here.
@@ -77,14 +79,33 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_EXIT:
 		exit(f->R.rdi);
 		break;
+	case SYS_FORK:
+		break;
+	case SYS_EXEC:
+		break;
+	case SYS_WAIT:
+		break;
 	case SYS_CREATE:
 		f->R.rax = create(f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:
 		f->R.rax = remove(f->R.rdi);
+		break;
+	case SYS_OPEN:
+		break;
+	case SYS_FILESIZE:
+		break;
+	case SYS_READ:
+		f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
 	case SYS_WRITE:
-		halt(); // #ifdef DEBUG FOR TESTING
-		// args-single이나 halt나 exit이나 출력을 위해 write syscall을 사용하므로 잘 작동하는지 테스트
+		f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
+	case SYS_SEEK:
+		break;
+	case SYS_TELL:
+		break;
+	case SYS_CLOSE:
 		break;
 	default:
 		thread_exit();
@@ -150,4 +171,27 @@ bool create (const char *file, unsigned initial_size)
 bool remove (const char *file)
 {
 	return filesys_remove(file);
+}
+
+int read (int fd, void *buffer, unsigned size){
+	check_address(buffer);
+	if (fd == 0) {
+		int i;
+		unsigned char *buf = buffer;
+		for (i = 0; i < size; i++) {
+			char c = input_getc();
+			*buf++ = c;
+			if (c == '\0') break;
+		}
+		return i;
+	}
+}
+
+int write (int fd, const void *buffer, unsigned size){
+	check_address(buffer);
+	if (fd == 1) {
+		putbuf(buffer, size);
+		return size;
+	}
+	return -1;
 }
