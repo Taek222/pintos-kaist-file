@@ -207,7 +207,7 @@ int process_exec(void *f_name)
 	_if.R.rdi = argc;
 	_if.R.rsi = (uint64_t)*rspp + sizeof(void *);
 
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true); // #ifdef DEBUG
+	//hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true); // #ifdef DEBUG
 	// Q. ptr to number? -> convert to int, uint64_t
 
 	/* If load failed, quit. */
@@ -277,9 +277,11 @@ int process_wait(tid_t child_tid UNUSED)
 	 * XXX:       implementing the process_wait. */
 
 	// busy waiting #ifdef DEBUG
-	while (1)
-	{
-	}
+	// while (1)
+	// {
+	// }
+	for (int i = 0; i < 1000000000; i++)
+		;
 
 	return -1;
 }

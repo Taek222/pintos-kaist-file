@@ -14,14 +14,14 @@ void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 
 void check_address(uaddr);
-static int64_t get_user (const uint8_t *uaddr);
-static bool put_user (uint8_t *udst, uint8_t byte);
-void halt (void);
-void exit (int status);
-bool create (const char *file, unsigned initial_size);
-bool remove (const char *file);
-int read (int fd, void *buffer, unsigned size);
-int write (int fd, const void *buffer, unsigned size);
+static int64_t get_user(const uint8_t *uaddr);
+static bool put_user(uint8_t *udst, uint8_t byte);
+void halt(void);
+void exit(int status);
+bool create(const char *file, unsigned initial_size);
+bool remove(const char *file);
+int read(int fd, void *buffer, unsigned size);
+int write(int fd, const void *buffer, unsigned size);
 
 /* System call.
  *
@@ -55,7 +55,9 @@ void syscall_handler(struct intr_frame *f UNUSED)
 {
 	// TODO: Your implementation goes here.
 
-	printf("system call!\n");
+	//printf("system call!\n");
+	//printf("syscall : %d\n", f->R.rax);
+
 #ifdef DEBUG
 	// syscall stack frame? (stack base - stack ptr)
 	//hex_dump(f->rsp, f->rsp, f->R.rbp - f->rsp, true); // #ifdef DEBUG
@@ -108,19 +110,22 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_CLOSE:
 		break;
 	default:
-		thread_exit();
+		//thread_exit();
+		exit(-1);
 		break;
 	}
 
-	thread_exit();
+	//thread_exit();
 }
 
 /* Just check whether the address is under KERN_BASE */
 void check_address(uaddr)
 {
-	if (!(is_user_vaddr(uaddr))){
+	if (!(is_user_vaddr(uaddr)))
+	{
 		exit(-1);
 	}
+	// Q. page_fault 함수 호출?
 }
 
 /* Reads a byte at user virtual address UADDR.
@@ -128,68 +133,78 @@ void check_address(uaddr)
  * Returns the byte value if successful, -1 if a segfault
  * occurred. */
 static int64_t
-get_user (const uint8_t *uaddr) {
-    int64_t result;
-    __asm __volatile (
-    "movabsq $done_get, %0\n"
-    "movzbq %1, %0\n"
-    "done_get:\n"
-    : "=&a" (result) : "m" (*uaddr));
-    return result;
+get_user(const uint8_t *uaddr)
+{
+	int64_t result;
+	__asm __volatile(
+		"movabsq $done_get, %0\n"
+		"movzbq %1, %0\n"
+		"done_get:\n"
+		: "=&a"(result)
+		: "m"(*uaddr));
+	return result;
 }
 
 /* Writes BYTE to user address UDST.
  * UDST must be below KERN_BASE.
  * Returns true if successful, false if a segfault occurred. */
 static bool
-put_user (uint8_t *udst, uint8_t byte) {
-    int64_t error_code;
-    __asm __volatile (
-    "movabsq $done_put, %0\n"
-    "movb %b2, %1\n"
-    "done_put:\n"
-    : "=&a" (error_code), "=m" (*udst) : "q" (byte));
-    return error_code != -1;
+put_user(uint8_t *udst, uint8_t byte)
+{
+	int64_t error_code;
+	__asm __volatile(
+		"movabsq $done_put, %0\n"
+		"movb %b2, %1\n"
+		"done_put:\n"
+		: "=&a"(error_code), "=m"(*udst)
+		: "q"(byte));
+	return error_code != -1;
 }
 
-void halt (void)
+void halt(void)
 {
 	power_off();
 }
 
-void exit (int status)
+void exit(int status)
 {
 	printf("%s: exit(%d)\n", thread_name(), status);
 	thread_exit();
 }
 
-bool create (const char *file, unsigned initial_size)
+bool create(const char *file, unsigned initial_size)
 {
 	return filesys_create(file, initial_size);
 }
 
-bool remove (const char *file)
+bool remove(const char *file)
 {
 	return filesys_remove(file);
 }
 
-int read (int fd, void *buffer, unsigned size){
+int read(int fd, void *buffer, unsigned size)
+{
 	check_address(buffer);
-	if (fd == 0) {
+	if (fd == 0)
+	{
 		int i;
 		unsigned char *buf = buffer;
-		for (i = 0; i < size; i++) {
+		for (i = 0; i < size; i++)
+		{
 			char c = input_getc();
 			*buf++ = c;
-			if (c == '\0') break;
+			if (c == '\0')
+				break;
 		}
 		return i;
 	}
 }
 
-int write (int fd, const void *buffer, unsigned size){
+int write(int fd, const void *buffer, unsigned size)
+{
 	check_address(buffer);
-	if (fd == 1) {
+	if (fd == 1)
+	{
 		putbuf(buffer, size);
 		return size;
 	}
