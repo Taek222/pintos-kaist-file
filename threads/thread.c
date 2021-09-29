@@ -215,6 +215,10 @@ tid_t thread_create(const char *name, int priority,
 	}
 	tid = t->tid = allocate_tid();
 
+	// 2-3 Parent child
+	struct thread *cur = thread_current();
+	list_push_back(&cur->child_list, &t->child_elem); // [parent] add new child to child_list
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t)kernel_thread;
@@ -477,6 +481,9 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->waiting_lock = NULL;
 	//t->donors = malloc(sizeof(struct list));
 	list_init(&t->donors);
+
+	// 2-3
+	list_init(&t->child_list);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

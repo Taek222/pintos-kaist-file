@@ -106,6 +106,11 @@ struct thread
 	int nice;
 	int recent_cpu;
 
+	/* Project 2 */
+	// 2-3 Parent-child hierarchy
+	struct list child_list;		 // keep children
+	struct list_elem child_elem; // used to put current thread into 'children' list
+
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list
 

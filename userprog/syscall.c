@@ -210,3 +210,39 @@ int write(int fd, const void *buffer, unsigned size)
 	}
 	return -1;
 }
+
+tid_t fork(const char *thread_name)
+{
+	// create new process (thread?) with the given name -> thread_create? process_create_initd?
+	tid_t tid = process_create_initd(thread_name);
+	if (tid == TID_ERROR)
+		return TID_ERROR;
+
+	// clone callee-saved registers
+	struct thread *parent = thread_current();
+	struct thread *child = get_child_with_pid(tid);
+	child->tf.rsp = parent->tf.rsp;
+	child->tf.R.rbx = parent->tf.R.rbx;
+	child->tf.R.rbp = parent->tf.R.rbp;
+	child->tf.R.r12 = parent->tf.R.r12;
+	child->tf.R.r13 = parent->tf.R.r13;
+	child->tf.R.r14 = parent->tf.R.r14;
+	child->tf.R.r15 = parent->tf.R.r15;
+
+	// duplicate resources - files descriptors (fd?) and VM space (pml4_for_each)
+	child->pml4 = parent->pml4;
+	//pml4_for_each(parent->pml4, copy_page, child);
+
+	// child return val
+	child->tf.R.rax = 0;
+	return tid;
+}
+
+// static bool
+// copy_page (uint64_t *pte, void *va,  void *aux) {
+//         if (is_user_vaddr (va)){
+// 			child->pml4
+// 		}
+// 			printf ("user page: %llx\n", va);
+//         return true;
+// }
