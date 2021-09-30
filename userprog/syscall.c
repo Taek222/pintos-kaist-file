@@ -82,10 +82,14 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		exit(f->R.rdi);
 		break;
 	case SYS_FORK:
+		f->R.rax = process_fork(f->R.rdi);
 		break;
 	case SYS_EXEC:
+		if (process_exec(f->R.rdi) == -1)
+			exit(-1);
 		break;
 	case SYS_WAIT:
+		f->R.rax = process_wait(f->R.rdi);
 		break;
 	case SYS_CREATE:
 		f->R.rax = create(f->R.rdi, f->R.rsi);
@@ -119,7 +123,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 }
 
 /* Just check whether the address is under KERN_BASE */
-void check_address(uaddr)
+void check_address(const uint64_t *uaddr)
 {
 	if (!(is_user_vaddr(uaddr)))
 	{
@@ -168,6 +172,9 @@ void halt(void)
 
 void exit(int status)
 {
+	struct thread *cur = thread_current();
+	cur->exit_status = status;
+
 	printf("%s: exit(%d)\n", thread_name(), status);
 	thread_exit();
 }

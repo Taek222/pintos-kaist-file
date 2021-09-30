@@ -615,7 +615,7 @@ do_schedule(int status)
 	{
 		struct thread *victim =
 			list_entry(list_pop_front(&destruction_req), struct thread, elem);
-		palloc_free_page(victim);
+		// palloc_free_page(victim); // Project 2-3. Will be freed in 'process_wait'
 	}
 	thread_current()->status = status;
 	schedule();

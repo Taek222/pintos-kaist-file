@@ -112,22 +112,29 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	if (is_kernel_vaddr(va))
+		return false;
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page(parent->pml4, va);
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
+	newpage = pml4_create(); // #ifdef DEBUG 이거 맞나?
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
+	writable = is_writable((uint64_t *)parent_page); // #ifdef DEBUG
+	// Q. 이거 맞는지 잘 모르겠다.
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page(current->pml4, va, newpage, writable))
 	{
 		/* 6. TODO: if fail to insert page, do error handling. */
+		printf("Failed to write page at 0x%llx", va); // #ifdef DEBUG
+		return false;
 	}
 	return true;
 }
@@ -274,6 +281,7 @@ void load_userStack(char **argv, int argc, void **rspp)
 	**(void ***)rspp = (void *)0;
 }
 
+#include "threads/synch.h"
 /* Waits for thread TID to die and returns its exit status.  If
  * it was terminated by the kernel (i.e. killed due to an
  * exception), returns -1.  If TID is invalid or if it was not a
@@ -293,10 +301,33 @@ int process_wait(tid_t child_tid UNUSED)
 	// while (1)
 	// {
 	// }
-	for (int i = 0; i < 1000000000; i++)
-		;
 
-	return -1;
+	struct thread *cur = thread_current();
+	struct thread *child = get_child_with_pid(child_tid);
+	// [Fail] Not my child
+	if (child == NULL)
+		return -1;
+
+	struct semaphore sema;
+	sema_init(&sema, 0);
+
+	// Share the same semaphore
+	cur->wait_sema = &sema;
+	child->wait_sema = &sema;
+
+	// Parent waits until child signals (sema_up) after its execution
+	sema_down(&sema);
+
+	// for (int i = 0; i < 1000000000; i++)
+	// 	;
+
+	int exit_status = child->exit_status;
+
+	// Q. 자식 프로세스의 프로세스 디스크립터 삭제??
+	// 아마 thread_create에서 palloc 한거 free 하라는 소리인 것 같다
+	palloc_free_page(child);
+
+	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -307,6 +338,12 @@ void process_exit(void)
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+
+	struct thread *cur = thread_current();
+	list_remove(&cur->child_elem);
+
+	// Wake up blocked parent
+	sema_up(&cur->wait_sema);
 
 	process_cleanup();
 }
