@@ -308,11 +308,8 @@ int process_wait(tid_t child_tid UNUSED)
 	if (child == NULL)
 		return -1;
 
-	struct semaphore *sema;
-	sema = child->wait_sema;
-
 	// Parent waits until child signals (sema_up) after its execution
-	sema_down(sema);
+	sema_down(&child->wait_sema);
 
 	// for (int i = 0; i < 1000000000; i++)
 	// 	;
@@ -338,9 +335,9 @@ void process_exit(void)
 	list_remove(&cur->child_elem);
 
 	process_cleanup();
-	
+
 	// Wake up blocked parent
-	sema_up(cur->wait_sema);
+	sema_up(&cur->wait_sema);
 }
 
 /* Free the current process's resources. */
