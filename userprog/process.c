@@ -31,7 +31,7 @@ struct thread *get_child_with_pid(int pid)
 {
 	struct thread *cur = thread_current();
 	struct list *child_list = &cur->child_list;
-	for (struct list_elem *e = list_begin(child_list); e != list_end(&child_list); e = list_next(e))
+	for (struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
 	{
 		struct thread *t = list_entry(e, struct thread, child_elem);
 		if (t->tid == pid)
@@ -120,7 +120,8 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
-	newpage = pml4_create(); // #ifdef DEBUG 이거 맞나?
+	newpage = palloc_get_page(0); //pml4_create(); // #ifdef DEBUG 이거 맞나?
+	// mmu.c pml4_set_page 함수 주석 찾아보니까, kernel vaddr이여야 함 -> palloc으로 동적할당
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
