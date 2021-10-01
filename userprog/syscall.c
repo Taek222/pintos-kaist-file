@@ -52,7 +52,7 @@ void syscall_init(void)
 
 /* The main system call interface */
 // #define DEBUG
-void syscall_handler(struct intr_frame *f UNUSED)
+void syscall_handler(struct intr_frame *f)
 {
 	// TODO: Your implementation goes here.
 
@@ -90,7 +90,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		exit(f->R.rdi);
 		break;
 	case SYS_FORK:
-		f->R.rax = process_fork(f->R.rdi, NULL);
+		f->R.rax = process_fork(f->R.rdi, f);
 		break;
 	case SYS_EXEC:
 		// writable = is_kernel_vaddr(f->R.rdi); //is_writable((uint64_t *)f->R.rdi);

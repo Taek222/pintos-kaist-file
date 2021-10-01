@@ -114,7 +114,8 @@ struct thread
 	// 2-3 wait syscall
 	struct semaphore wait_sema; // used by parent to wait for child
 	int exit_status;			// used to deliver child exit_status to parent
-
+	// 2-3 fork syscall
+	struct intr_frame parent_if; // to preserve parent's intr_frame
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list
 

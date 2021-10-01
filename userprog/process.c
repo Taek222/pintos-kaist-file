@@ -92,9 +92,10 @@ initd(void *f_name)
 
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
-tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
+tid_t process_fork(const char *name, struct intr_frame *if_)
 {
 	/* Clone current thread to new thread.*/
+	memcpy(&thread_current()->parent_if, if_, sizeof(struct intr_frame));
 	return thread_create(name,
 						 PRI_DEFAULT, __do_fork, thread_current());
 }
@@ -153,6 +154,7 @@ __do_fork(void *aux)
 	struct thread *current = thread_current();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if;
+	parent_if = &parent->parent_if;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
