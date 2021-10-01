@@ -9,6 +9,7 @@
 #include "intrinsic.h"
 #include "threads/vaddr.h"
 #include "filesys/filesys.h"
+#include "userprog/process.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -73,6 +74,13 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	//hex_dump(f->R.rbp, f->R.rbp, USER_STACK - f->R.rbp, true); // #ifdef DEBUG
 #endif
 
+	// #ifdef DEBUG
+	char *fn_copy;
+	int siz;
+	bool writable;
+	// SYS_EXEC - process_exec의 process_cleanup 때문에 f->R.rdi 날아감.
+	// 여기서 동적할당해서 복사한 뒤, 그걸 넘겨주기?
+
 	switch (f->R.rax)
 	{
 	case SYS_HALT:
@@ -82,9 +90,16 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		exit(f->R.rdi);
 		break;
 	case SYS_FORK:
-		f->R.rax = process_fork(f->R.rdi);
+		f->R.rax = process_fork(f->R.rdi, NULL);
 		break;
 	case SYS_EXEC:
+		// writable = is_kernel_vaddr(f->R.rdi); //is_writable((uint64_t *)f->R.rdi);
+		// fn_copy = palloc_get_page(0);
+		// if (fn_copy == NULL)
+		// 	exit(-1);
+		// siz = strlen(f->R.rdi);
+		// strlcpy(fn_copy, f->R.rdi, siz); // Kernel panic; fn_copy는 kernel virtual addr라 write가 안되는건가?
+
 		if (process_exec(f->R.rdi) == -1)
 			exit(-1);
 		break;
