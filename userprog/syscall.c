@@ -74,13 +74,6 @@ void syscall_handler(struct intr_frame *f)
 	//hex_dump(f->R.rbp, f->R.rbp, USER_STACK - f->R.rbp, true); // #ifdef DEBUG
 #endif
 
-	// #ifdef DEBUG
-	char *fn_copy;
-	int siz;
-	bool writable;
-	// SYS_EXEC - process_exec의 process_cleanup 때문에 f->R.rdi 날아감.
-	// 여기서 동적할당해서 복사한 뒤, 그걸 넘겨주기?
-
 	switch (f->R.rax)
 	{
 	case SYS_HALT:
@@ -100,7 +93,7 @@ void syscall_handler(struct intr_frame *f)
 		// siz = strlen(f->R.rdi);
 		// strlcpy(fn_copy, f->R.rdi, siz); // Kernel panic; fn_copy는 kernel virtual addr라 write가 안되는건가?
 
-		if (process_exec(f->R.rdi) == -1)
+		if (exec(f->R.rdi) == -1)
 			exit(-1);
 		break;
 	case SYS_WAIT:
@@ -137,14 +130,15 @@ void syscall_handler(struct intr_frame *f)
 	//thread_exit();
 }
 
-/* Just check whether the address is under KERN_BASE */
+// Check whether the address is under KERN_BASE
+// and the address is mapped properly (prevents page_fault)
 void check_address(const uint64_t *uaddr)
 {
-	if (!(is_user_vaddr(uaddr)))
+	struct thread *cur = thread_current();
+	if (!(is_user_vaddr(uaddr)) || pml4_get_page(cur->pml4, uaddr) == NULL)
 	{
 		exit(-1);
 	}
-	// Q. page_fault 함수 호출?
 }
 
 /* Reads a byte at user virtual address UADDR.
@@ -196,7 +190,8 @@ void exit(int status)
 
 bool create(const char *file, unsigned initial_size)
 {
-	if (file == NULL) exit(-1);
+	if (file == NULL)
+		exit(-1);
 	check_address(file);
 	return filesys_create(file, initial_size);
 }
@@ -270,3 +265,36 @@ tid_t fork(const char *thread_name)
 // 			printf ("user page: %llx\n", va);
 //         return true;
 // }
+
+int exec(char *file_name)
+{
+	struct thread *cur = thread_current();
+	check_address(file_name);
+
+	// #ifdef DEBUG
+	// SYS_EXEC - process_exec의 process_cleanup 때문에 f->R.rdi 날아감.
+	// 여기서 동적할당해서 복사한 뒤, 그걸 넘겨주기?
+
+	// // bool writable;
+	// // writable = is_kernel_vaddr(f->R.rdi); //is_writable((uint64_t *)f->R.rdi);
+
+	int siz = strlen(file_name) + 1;
+	char *fn_copy = malloc(siz);
+	if (fn_copy == NULL)
+		exit(-1);
+	strlcpy(fn_copy, file_name, siz); // Kernel panic; fn_copy는 kernel virtual addr라 write가 안되는건가?
+
+	//printf("[exec] calling process_exec with CLI : %s\n", file_name);
+	cur->calledExec = true;
+	if (process_exec(fn_copy) == -1)
+		return -1;
+
+	// int child_pid = process_create_initd(file_name);
+	// if (child_pid == TID_ERROR)
+	// 	return -1;
+	// struct thread *child = get_child_with_pid(child_pid);
+
+	// sema_down(&child->load_sema);
+
+	return 0;
+}

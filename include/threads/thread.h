@@ -116,6 +116,9 @@ struct thread
 	int exit_status;			// used to deliver child exit_status to parent
 	// 2-3 fork syscall
 	struct intr_frame parent_if; // to preserve parent's intr_frame
+
+	bool calledExec;
+
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list
 

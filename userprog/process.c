@@ -196,6 +196,7 @@ int process_exec(void *f_name)
 {
 	char *file_name = f_name;
 	bool success;
+	struct thread *cur = thread_current();
 
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
@@ -224,6 +225,17 @@ int process_exec(void *f_name)
 	/* And then load the binary */
 	success = load(file_name, &_if);
 
+	/* If load failed, quit. */
+	if (!success)
+	{
+		if (cur->calledExec)
+			free(file_name);
+		else
+			palloc_free_page(file_name);
+
+		return -1;
+	}
+
 	// Project 2-1. Pass args - load arguments onto the user stack
 	void **rspp = &_if.rsp;
 	load_userStack(argv, argc, rspp);
@@ -233,10 +245,11 @@ int process_exec(void *f_name)
 	//hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true); // #ifdef DEBUG
 	// Q. ptr to number? -> convert to int, uint64_t
 
-	/* If load failed, quit. */
-	palloc_free_page(file_name);
-	if (!success)
-		return -1;
+	//palloc_free_page(file_name);
+	if (cur->calledExec)
+		free(file_name);
+	else
+		palloc_free_page(file_name);
 
 	/* Start switched process. */
 	do_iret(&_if);
