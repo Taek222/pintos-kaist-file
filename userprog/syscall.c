@@ -181,6 +181,8 @@ void exit(int status)
 
 bool create(const char *file, unsigned initial_size)
 {
+	if (file == NULL) exit(-1);
+	check_address(file);
 	return filesys_create(file, initial_size);
 }
 
