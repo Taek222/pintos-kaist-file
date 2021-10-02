@@ -22,6 +22,8 @@
 #include "vm/vm.h"
 #endif
 
+#define DEBUG
+
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
@@ -95,9 +97,10 @@ initd(void *f_name)
 tid_t process_fork(const char *name, struct intr_frame *if_)
 {
 	/* Clone current thread to new thread.*/
-	memcpy(&thread_current()->parent_if, if_, sizeof(struct intr_frame));
+	struct thread *cur = thread_current();
+	memcpy(&cur->parent_if, if_, sizeof(struct intr_frame)); // 여기가 잘못됨?
 	return thread_create(name,
-						 PRI_DEFAULT, __do_fork, thread_current());
+						 PRI_DEFAULT, __do_fork, cur);
 }
 
 #ifndef VM
@@ -106,6 +109,10 @@ tid_t process_fork(const char *name, struct intr_frame *if_)
 static bool
 duplicate_pte(uint64_t *pte, void *va, void *aux)
 {
+#ifdef DEBUG
+	printf("Is user %d, is kernel %d, writable %d\n", is_user_pte(pte), is_kern_pte(pte), is_writable(pte));
+#endif
+
 	struct thread *current = thread_current();
 	struct thread *parent = (struct thread *)aux;
 	void *parent_page;
@@ -114,30 +121,63 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
 	if (is_kernel_vaddr(va))
-		return false;
+	{
+#ifdef DEBUG
+		//printf("[fork-duplicate] fail at step 1 %llx\n", va);
+#endif
+		return true;
+	}
+	else
+	{
+#ifdef DEBUG
+		printf("[fork-duplicate] pass at step 1 %llx\n", va);
+#endif
+	}
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page(parent->pml4, va);
+	if (parent_page == NULL)
+	{
+		printf("[fork-duplicate] failed to fetch page for user vaddr 'va'\n");
+		return false;
+	}
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
-	newpage = palloc_get_page(0); //pml4_create(); // #ifdef DEBUG 이거 맞나?
+	newpage = palloc_get_page(PAL_USER); //pml4_create(); // #ifdef DEBUG 이거 맞나?
+	if (newpage == NULL)
+	{
+		printf("[fork-duplicate] failed to palloc new page\n");
+		return false;
+	}
 	// mmu.c pml4_set_page 함수 주석 찾아보니까, kernel vaddr이여야 함 -> palloc으로 동적할당
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
-	writable = is_writable((uint64_t *)parent_page); // #ifdef DEBUG
-	// Q. 이거 맞는지 잘 모르겠다.
+	memcpy(newpage, pte, PGSIZE);
+	writable = is_writable(pte); // #ifdef DEBUG
+								 // Q. 이거 맞는지 잘 모르겠다.
 
+#ifdef DEBUG
+	printf("Is newpage kernel vaddr? %d\n", is_kernel_vaddr(newpage));
+#endif
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page(current->pml4, va, newpage, writable))
 	{
 		/* 6. TODO: if fail to insert page, do error handling. */
-		printf("Failed to write page at 0x%llx", va); // #ifdef DEBUG
+		printf("Failed to write page\n"); // #ifdef DEBUG
 		return false;
 	}
+
+#ifdef DEBUG
+	// is 'va' correctly mapped to newpage?
+	if (pml4_get_page(current->pml4, va) != newpage)
+		printf("Not mapped!!!!!!!!!!!!!");
+
+	printf("--Completed copy--\n");
+#endif
 	return true;
 }
 #endif
@@ -157,8 +197,13 @@ __do_fork(void *aux)
 	parent_if = &parent->parent_if;
 	bool succ = true;
 
+#ifdef DEBUG
+	printf("[Fork] Forking from %s to %s\n", parent->name, current->name);
+#endif
+
 	/* 1. Read the cpu context to local stack. */
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
+	// if_.R.rax = 2; // return value of
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -183,11 +228,20 @@ __do_fork(void *aux)
 
 	process_init();
 
+#ifdef DEBUG
+	printf("[do_fork] %s Ready to switch!\n", current->name);
+#endif
+
+	//void *test = malloc(10);	//palloc_get_page(PAL_USER);
+	//if_.R.rax = (uint64_t)test; //0x400000u; //USER_STACK;
+
 	/* Finally, switch to the newly created process. */
 	if (succ)
 		do_iret(&if_);
 error:
-	thread_exit();
+	current->exit_status = TID_ERROR;
+	exit(TID_ERROR); // #ifdef DEBUG
+					 //thread_exit();
 }
 
 /* Switch the current execution context to the f_name.
