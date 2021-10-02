@@ -99,8 +99,17 @@ tid_t process_fork(const char *name, struct intr_frame *if_)
 	/* Clone current thread to new thread.*/
 	struct thread *cur = thread_current();
 	memcpy(&cur->parent_if, if_, sizeof(struct intr_frame)); // 여기가 잘못됨?
-	return thread_create(name,
-						 PRI_DEFAULT, __do_fork, cur);
+
+	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, cur);
+	if (tid == TID_ERROR)
+		return TID_ERROR;
+
+	struct thread *child = get_child_with_pid(tid);
+	sema_down(&child->fork_sema);
+	if (child->exit_status == -1)
+		return TID_ERROR;
+
+	return tid;
 }
 
 #ifndef VM
@@ -109,10 +118,6 @@ tid_t process_fork(const char *name, struct intr_frame *if_)
 static bool
 duplicate_pte(uint64_t *pte, void *va, void *aux)
 {
-#ifdef DEBUG
-	printf("Is user %d, is kernel %d, writable %d\n", is_user_pte(pte), is_kern_pte(pte), is_writable(pte));
-#endif
-
 	struct thread *current = thread_current();
 	struct thread *parent = (struct thread *)aux;
 	void *parent_page;
@@ -133,6 +138,10 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 		printf("[fork-duplicate] pass at step 1 %llx\n", va);
 #endif
 	}
+
+#ifdef DEBUG
+	printf("Is user %d, is kernel %d, writable %d\n", is_user_pte(pte), is_kern_pte(pte), is_writable(pte));
+#endif
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page(parent->pml4, va);
@@ -234,6 +243,9 @@ __do_fork(void *aux)
 
 	//void *test = malloc(10);	//palloc_get_page(PAL_USER);
 	//if_.R.rax = (uint64_t)test; //0x400000u; //USER_STACK;
+
+	// use semaphore to prevent
+	sema_up(&current->fork_sema);
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
