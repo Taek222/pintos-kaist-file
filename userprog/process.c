@@ -151,6 +151,11 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 		return false;
 	}
 
+#ifdef DEBUG
+	void *test = ptov(PTE_ADDR(*pte)) + pg_ofs(va); // should be same as parent_page -> Yes!
+	uint64_t va_offset = pg_ofs(va);				// 0; va comes from PTE, so there must be no 12bit physical offset
+#endif
+
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
 	newpage = palloc_get_page(PAL_USER); //pml4_create(); // #ifdef DEBUG 이거 맞나?
@@ -159,14 +164,15 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 		printf("[fork-duplicate] failed to palloc new page\n");
 		return false;
 	}
+
 	// mmu.c pml4_set_page 함수 주석 찾아보니까, kernel vaddr이여야 함 -> palloc으로 동적할당
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
-	memcpy(newpage, pte, PGSIZE);
+	memcpy(newpage, parent_page, PGSIZE);
 	writable = is_writable(pte); // #ifdef DEBUG
-								 // Q. 이거 맞는지 잘 모르겠다.
+								 // *PTE is an address that points to parent_page
 
 #ifdef DEBUG
 	printf("Is newpage kernel vaddr? %d\n", is_kernel_vaddr(newpage));
@@ -212,7 +218,7 @@ __do_fork(void *aux)
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
-	// if_.R.rax = 2; // return value of
+	if_.R.rax = 0; // return value of
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -398,8 +404,15 @@ int process_wait(tid_t child_tid UNUSED)
 
 	int exit_status = child->exit_status;
 
+#ifdef DEBUG
+	printf("[process_wait] Child %d %s : exit status - %d\n", child_tid, child->name, exit_status);
+#endif
+
+	//sema_up(&cur->wait_sema); // #ifdef
+
 	// Q. 자식 프로세스의 프로세스 디스크립터 삭제??
 	// 아마 thread_create에서 palloc 한거 free 하라는 소리인 것 같다
+	list_remove(&child->child_elem);
 	palloc_free_page(child);
 
 	return exit_status;
@@ -414,12 +427,14 @@ void process_exit(void)
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
 	struct thread *cur = thread_current();
-	list_remove(&cur->child_elem);
+
+	printf("%s: exit(%d)\n", cur->name, cur->exit_status);
 
 	process_cleanup();
 
 	// Wake up blocked parent
 	sema_up(&cur->wait_sema);
+	//sema_down(&cur->wait_sema); // P2-3 syscall exit - wait until parent receives exit status
 }
 
 /* Free the current process's resources. */
