@@ -105,7 +105,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_)
 		return TID_ERROR;
 
 	struct thread *child = get_child_with_pid(tid);
-	sema_down(&child->fork_sema);
+	sema_down(&child->fork_sema); // wait until child loads
 	if (child->exit_status == -1)
 		return TID_ERROR;
 
@@ -147,49 +147,46 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 	parent_page = pml4_get_page(parent->pml4, va);
 	if (parent_page == NULL)
 	{
-		printf("[fork-duplicate] failed to fetch page for user vaddr 'va'\n");
+		printf("[fork-duplicate] failed to fetch page for user vaddr 'va'\n"); // #ifdef DEBUG
 		return false;
 	}
 
 #ifdef DEBUG
+	// page table, virtual address 이해
+	// 'pte' here = address pointing to one page table entry
+	// *pte = page table entry = address of the physical frame
 	void *test = ptov(PTE_ADDR(*pte)) + pg_ofs(va); // should be same as parent_page -> Yes!
-	uint64_t va_offset = pg_ofs(va);				// 0; va comes from PTE, so there must be no 12bit physical offset
+	uint64_t va_offset = pg_ofs(va);				// should be 0; va comes from PTE, so there must be no 12bit physical offset
 #endif
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
-	newpage = palloc_get_page(PAL_USER); //pml4_create(); // #ifdef DEBUG 이거 맞나?
+	newpage = palloc_get_page(PAL_USER);
 	if (newpage == NULL)
 	{
-		printf("[fork-duplicate] failed to palloc new page\n");
+		printf("[fork-duplicate] failed to palloc new page\n"); // #ifdef DEBUG
 		return false;
 	}
-
-	// mmu.c pml4_set_page 함수 주석 찾아보니까, kernel vaddr이여야 함 -> palloc으로 동적할당
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
 	memcpy(newpage, parent_page, PGSIZE);
-	writable = is_writable(pte); // #ifdef DEBUG
-								 // *PTE is an address that points to parent_page
+	writable = is_writable(pte); // *PTE is an address that points to parent_page
 
-#ifdef DEBUG
-	printf("Is newpage kernel vaddr? %d\n", is_kernel_vaddr(newpage));
-#endif
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page(current->pml4, va, newpage, writable))
 	{
 		/* 6. TODO: if fail to insert page, do error handling. */
-		printf("Failed to write page\n"); // #ifdef DEBUG
+		printf("Failed to map user virtual page to given physical frame\n"); // #ifdef DEBUG
 		return false;
 	}
 
 #ifdef DEBUG
 	// is 'va' correctly mapped to newpage?
 	if (pml4_get_page(current->pml4, va) != newpage)
-		printf("Not mapped!!!!!!!!!!!!!");
+		printf("Not mapped!"); // never called
 
 	printf("--Completed copy--\n");
 #endif
@@ -218,7 +215,7 @@ __do_fork(void *aux)
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
-	if_.R.rax = 0; // return value of
+	if_.R.rax = 0; // fork return value for child
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -247,10 +244,7 @@ __do_fork(void *aux)
 	printf("[do_fork] %s Ready to switch!\n", current->name);
 #endif
 
-	//void *test = malloc(10);	//palloc_get_page(PAL_USER);
-	//if_.R.rax = (uint64_t)test; //0x400000u; //USER_STACK;
-
-	// use semaphore to prevent
+	// child loaded successfully, wake up parent
 	sema_up(&current->fork_sema);
 
 	/* Finally, switch to the newly created process. */
@@ -434,7 +428,6 @@ void process_exit(void)
 
 	// Wake up blocked parent
 	sema_up(&cur->wait_sema);
-	//sema_down(&cur->wait_sema); // P2-3 syscall exit - wait until parent receives exit status
 }
 
 /* Free the current process's resources. */

@@ -317,12 +317,9 @@ void thread_exit(void)
 	process_exit();
 #endif
 
-	struct thread *cur = thread_current();
-
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable();
-	//sema_up(&cur->wait_sema); // P2-3
 	do_schedule(THREAD_DYING);
 	NOT_REACHED();
 }

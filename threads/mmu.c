@@ -8,6 +8,7 @@
 #include "threads/mmu.h"
 #include "intrinsic.h"
 
+// pdp = page directory page
 static uint64_t *
 pgdir_walk(uint64_t *pdp, const uint64_t va, int create)
 {
@@ -21,14 +22,16 @@ pgdir_walk(uint64_t *pdp, const uint64_t va, int create)
 			{
 				uint64_t *new_page = palloc_get_page(PAL_ZERO);
 				if (new_page)
-					pdp[idx] = vtop(new_page) | PTE_U | PTE_W | PTE_P;
+					pdp[idx] = vtop(new_page) | PTE_U | PTE_W | PTE_P; // create new PTE
+				// pdp[idx] = PTE (page table entry) = a page that stores physical addresss of the physical frames
 				else
 					return NULL;
 			}
 			else
 				return NULL;
 		}
-		return (uint64_t *)ptov(PTE_ADDR(pdp[idx]) + 8 * PTX(va));
+		// returns kernel virtual address mapped to the physical frame that va points to
+		return (uint64_t *)ptov(PTE_ADDR(pdp[idx]) + 8 * PTX(va)); // 8 = size of minimum addressable unit
 	}
 	return NULL;
 }
@@ -135,6 +138,9 @@ pt_for_each(uint64_t *pt, pte_for_each_func *func, void *aux,
 								((uint64_t)pdp_index << PDPESHIFT) |
 								((uint64_t)pdx_index << PDXSHIFT) |
 								((uint64_t)i << PTXSHIFT));
+			// va is reconstructed from PTE -> no physical offset
+			// pg_ofs(va) == 0
+
 			if (!func(pte, va, aux))
 				return false;
 		}
@@ -255,6 +261,8 @@ pml4_get_page(uint64_t *pml4, const void *uaddr)
 
 	if (pte && (*pte & PTE_P))
 		return ptov(PTE_ADDR(*pte)) + pg_ofs(uaddr);
+	// pte 참조해서 physical frame 시작 위치 알아낸 후,
+	// user vaddr에서 physical offset (pg_ofs) 뽑아내서 정확한 physical address 뽑아냄
 	return NULL;
 }
 
@@ -273,10 +281,11 @@ bool pml4_set_page(uint64_t *pml4, void *upage, void *kpage, bool rw)
 	ASSERT(is_user_vaddr(upage));
 	ASSERT(pml4 != base_pml4);
 
-	uint64_t *pte = pml4e_walk(pml4, (uint64_t)upage, 1); // address of pte (= physical address for physical memory frame)
+	uint64_t *pte = pml4e_walk(pml4, (uint64_t)upage, 1); // address of pte (pte = physical address for physical memory frame)
 
 	if (pte)
 		*pte = vtop(kpage) | PTE_P | (rw ? PTE_W : 0) | PTE_U;
+	// pte에 kpage가 가리키는 physical frame 위치를 넣어버림
 	return pte != NULL;
 }
 

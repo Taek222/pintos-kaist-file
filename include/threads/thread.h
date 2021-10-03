@@ -115,7 +115,7 @@ struct thread
 	struct semaphore wait_sema; // used by parent to wait for child
 	int exit_status;			// used to deliver child exit_status to parent
 	// 2-3 fork syscall
-	struct intr_frame parent_if; // to preserve parent's intr_frame
+	struct intr_frame parent_if; // to preserve parent's intr_frame and pass it down to child in fork
 	struct semaphore fork_sema;	 // parent wait until child fork completes
 	// 2-3 exec syscall
 	bool calledExec; // notify 'process_exec' if it was called by syscall exec

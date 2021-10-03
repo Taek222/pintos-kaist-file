@@ -279,7 +279,7 @@ int exec(char *file_name)
 	// // writable = is_kernel_vaddr(f->R.rdi); //is_writable((uint64_t *)f->R.rdi);
 
 	int siz = strlen(file_name) + 1;
-	char *fn_copy = malloc(siz);
+	char *fn_copy = malloc(siz); // #ifdef DEBUG palloc 쓰면 fault?
 	if (fn_copy == NULL)
 		exit(-1);
 	strlcpy(fn_copy, file_name, siz); // Kernel panic; fn_copy는 kernel virtual addr라 write가 안되는건가?
