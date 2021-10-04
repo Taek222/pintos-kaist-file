@@ -278,6 +278,13 @@ int read(int fd, void *buffer, unsigned size)
 		}
 		return i;
 	}
+	else
+	{
+		struct file *fileobj = find_file_by_fd(&files, fd);
+		if (fileobj == NULL)
+			return -1;
+		return file_read(fileobj, buffer, size);
+	}
 }
 
 int write(int fd, const void *buffer, unsigned size)
@@ -288,7 +295,13 @@ int write(int fd, const void *buffer, unsigned size)
 		putbuf(buffer, size);
 		return size;
 	}
-	return -1;
+	else
+	{
+		struct file *fileobj = find_file_by_fd(&files, fd);
+		if (fileobj == NULL)
+			return -1;
+		return file_write(fileobj, buffer, size);
+	}
 }
 
 void seek(int fd, unsigned position)
@@ -305,6 +318,8 @@ unsigned tell(int fd)
 void close(int fd)
 {
 	struct file *fileobj = find_file_by_fd(&files, fd);
+	if (fileobj == NULL)
+		return;
 	list_remove(&fileobj->elem);
 	file_close(fileobj);
 }
