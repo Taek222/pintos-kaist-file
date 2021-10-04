@@ -9,10 +9,16 @@
 #include "intrinsic.h"
 #include "threads/vaddr.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
 #include "userprog/process.h"
+#include <list.h>
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
+
+int fd_counter = 2; //0,1 is used for stdio
+static struct list files; //list of open files
+static struct file *find_file_by_fd(struct list files, int fd);
 
 void check_address(uaddr);
 static int64_t get_user(const uint8_t *uaddr);
@@ -21,8 +27,13 @@ void halt(void);
 void exit(int status);
 bool create(const char *file, unsigned initial_size);
 bool remove(const char *file);
+int open(const char *file);
+int filesize(int fd);
 int read(int fd, void *buffer, unsigned size);
 int write(int fd, const void *buffer, unsigned size);
+void seek(int fd, unsigned position);
+unsigned tell(int fd);
+void close(int fd);
 
 /* System call.
  *
@@ -48,6 +59,7 @@ void syscall_init(void)
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			  FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+	list_init(&files);
 }
 
 /* The main system call interface */
@@ -106,8 +118,10 @@ void syscall_handler(struct intr_frame *f)
 		f->R.rax = remove(f->R.rdi);
 		break;
 	case SYS_OPEN:
+		f->R.rax = open(f->R.rdi);
 		break;
 	case SYS_FILESIZE:
+		f->R.rax = filesize(f->R.rdi);
 		break;
 	case SYS_READ:
 		f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
@@ -116,10 +130,13 @@ void syscall_handler(struct intr_frame *f)
 		f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 	case SYS_SEEK:
+		seek(f->R.rdi, f->R.rsi);
 		break;
 	case SYS_TELL:
+		f->R.rax = tell(f->R.rdi);
 		break;
 	case SYS_CLOSE:
+		close(f->R.rdi);
 		break;
 	default:
 		//thread_exit();
@@ -135,7 +152,7 @@ void syscall_handler(struct intr_frame *f)
 void check_address(const uint64_t *uaddr)
 {
 	struct thread *cur = thread_current();
-	if (!(is_user_vaddr(uaddr)) || pml4_get_page(cur->pml4, uaddr) == NULL)
+	if (uaddr == NULL || !(is_user_vaddr(uaddr)) || pml4_get_page(cur->pml4, uaddr) == NULL)
 	{
 		exit(-1);
 	}
@@ -174,6 +191,22 @@ put_user(uint8_t *udst, uint8_t byte)
 	return error_code != -1;
 }
 
+static struct file *find_file_by_fd(struct list files, int fd){
+	struct list_elem *e;
+	if (list_empty(&files)){
+		return NULL;
+	}
+	for (e = list_begin(&files); e != list_end(&files); e = list_next(e))
+	{
+		struct file *f = list_entry(e, struct file, elem);
+		if (f->fd == fd)
+		{
+			return f;
+		}
+	}
+	return NULL;
+}
+
 void halt(void)
 {
 	power_off();
@@ -190,15 +223,39 @@ void exit(int status)
 
 bool create(const char *file, unsigned initial_size)
 {
-	if (file == NULL)
-		exit(-1);
 	check_address(file);
 	return filesys_create(file, initial_size);
 }
 
 bool remove(const char *file)
 {
+	check_address(file);
 	return filesys_remove(file);
+}
+
+int open(const char *file)
+{
+	check_address(file);
+	struct file *fileobj = filesys_open(file);
+
+	if (fileobj == NULL){
+		return -1;
+	}
+
+	if (find_file_by_fd(files, fileobj->fd) != NULL)
+	{
+		fileobj == file_reopen(fileobj); //if already opened, reopen it
+	}
+
+	fileobj->fd = fd_counter;
+	fd_counter ++;
+	list_push_back(&files, &fileobj->elem);
+	return fileobj->fd;
+}
+
+int filesize(int fd){
+	struct file *fileobj = find_file_by_fd(files, fd);
+	return file_length(fileobj);
 }
 
 int read(int fd, void *buffer, unsigned size)
@@ -228,6 +285,21 @@ int write(int fd, const void *buffer, unsigned size)
 		return size;
 	}
 	return -1;
+}
+
+void seek(int fd, unsigned position){
+	struct file *fileobj = find_file_by_fd(files, fd);
+	fileobj->pos = position;
+}
+
+unsigned tell(int fd){
+	struct file *fileobj = find_file_by_fd(files, fd);
+	return file_tell(fileobj);
+}
+void close(int fd){
+	struct file *fileobj = find_file_by_fd(files, fd);
+	list_remove(&fileobj->elem);
+	file_close(fileobj);
 }
 
 tid_t fork(const char *thread_name)

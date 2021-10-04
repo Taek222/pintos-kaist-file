@@ -141,8 +141,8 @@ page_fault (struct intr_frame *f) {
 	user = (f->error_code & PF_U) != 0;
 
 	/* [Project2] Support code for Preventing leak */
-	f->rip = f->R.rax;
-	f->R.rax = -1;
+	//f->rip = f->R.rax;
+	//f->R.rax = -1;
 
 #ifdef VM
 	/* For project 3 and later. */
