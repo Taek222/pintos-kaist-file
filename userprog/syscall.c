@@ -17,8 +17,8 @@ void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 
 int fd_counter = 2; //0,1 is used for stdio
-static struct list files; //list of open files
-static struct file *find_file_by_fd(struct list files, int fd);
+struct list files;	//list of open files
+static struct file *find_file_by_fd(struct list *filePtr, int fd);
 
 void check_address(uaddr);
 static int64_t get_user(const uint8_t *uaddr);
@@ -191,12 +191,14 @@ put_user(uint8_t *udst, uint8_t byte)
 	return error_code != -1;
 }
 
-static struct file *find_file_by_fd(struct list files, int fd){
+static struct file *find_file_by_fd(struct list *filesPtr, int fd)
+{
 	struct list_elem *e;
-	if (list_empty(&files)){
+	if (list_empty(filesPtr))
+	{
 		return NULL;
 	}
-	for (e = list_begin(&files); e != list_end(&files); e = list_next(e))
+	for (e = list_begin(filesPtr); e != list_end(filesPtr); e = list_next(e))
 	{
 		struct file *f = list_entry(e, struct file, elem);
 		if (f->fd == fd)
@@ -217,7 +219,7 @@ void exit(int status)
 	struct thread *cur = thread_current();
 	cur->exit_status = status;
 
-	//printf("%s: exit(%d)\n", thread_name(), status); #ifdef DEBUG
+	printf("%s: exit(%d)\n", thread_name(), status); //#ifdef DEBUG
 	thread_exit();
 }
 
@@ -238,23 +240,25 @@ int open(const char *file)
 	check_address(file);
 	struct file *fileobj = filesys_open(file);
 
-	if (fileobj == NULL){
+	if (fileobj == NULL)
+	{
 		return -1;
 	}
 
-	if (find_file_by_fd(files, fileobj->fd) != NULL)
+	if (find_file_by_fd(&files, fileobj->fd) != NULL)
 	{
 		fileobj == file_reopen(fileobj); //if already opened, reopen it
 	}
 
 	fileobj->fd = fd_counter;
-	fd_counter ++;
+	fd_counter++;
 	list_push_back(&files, &fileobj->elem);
 	return fileobj->fd;
 }
 
-int filesize(int fd){
-	struct file *fileobj = find_file_by_fd(files, fd);
+int filesize(int fd)
+{
+	struct file *fileobj = find_file_by_fd(&files, fd);
 	return file_length(fileobj);
 }
 
@@ -287,17 +291,20 @@ int write(int fd, const void *buffer, unsigned size)
 	return -1;
 }
 
-void seek(int fd, unsigned position){
-	struct file *fileobj = find_file_by_fd(files, fd);
+void seek(int fd, unsigned position)
+{
+	struct file *fileobj = find_file_by_fd(&files, fd);
 	fileobj->pos = position;
 }
 
-unsigned tell(int fd){
-	struct file *fileobj = find_file_by_fd(files, fd);
+unsigned tell(int fd)
+{
+	struct file *fileobj = find_file_by_fd(&files, fd);
 	return file_tell(fileobj);
 }
-void close(int fd){
-	struct file *fileobj = find_file_by_fd(files, fd);
+void close(int fd)
+{
+	struct file *fileobj = find_file_by_fd(&files, fd);
 	list_remove(&fileobj->elem);
 	file_close(fileobj);
 }
