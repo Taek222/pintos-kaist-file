@@ -237,6 +237,13 @@ __do_fork(void *aux)
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+	for (int i = 2; i < parent->fdCount; i++)
+	{
+		if (parent->fdTable[i] == NULL)
+			continue;
+		current->fdTable[i] = file_duplicate(parent->fdTable[i]);
+	}
+	current->fdCount = parent->fdCount;
 
 	process_init();
 
@@ -407,7 +414,7 @@ int process_wait(tid_t child_tid UNUSED)
 	// Q. 자식 프로세스의 프로세스 디스크립터 삭제??
 	// 아마 thread_create에서 palloc 한거 free 하라는 소리인 것 같다
 	list_remove(&child->child_elem);
-	palloc_free_page(child);
+	//palloc_free_page(child);
 
 	return exit_status;
 }
@@ -422,7 +429,15 @@ void process_exit(void)
 
 	struct thread *cur = thread_current();
 
-	printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+	// Close all files
+	//struct file **fdt = cur->fdTable; // file descriptor table
+	for (int i = 2; i < cur->fdCount; i++)
+	{
+		close(i);
+	}
+	palloc_free_page(cur->fdTable);
+
+	//printf("%s: exit(%d)\n", cur->name, cur->exit_status); //#ifdef DEBUG
 
 	process_cleanup();
 

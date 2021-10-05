@@ -119,6 +119,9 @@ struct thread
 	struct semaphore fork_sema;	 // parent wait until child fork completes
 	// 2-3 exec syscall
 	bool calledExec; // notify 'process_exec' if it was called by syscall exec
+	// 2-4 file descripter
+	struct file **fdTable;
+	int fdCount;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list

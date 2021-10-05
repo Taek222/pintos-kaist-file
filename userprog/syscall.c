@@ -18,7 +18,7 @@ void syscall_handler(struct intr_frame *);
 
 int fd_counter = 2; //0,1 is used for stdio
 struct list files;	//list of open files
-static struct file *find_file_by_fd(struct list *filePtr, int fd);
+static struct file *find_file_by_fd(int fd);
 
 void check_address(uaddr);
 static int64_t get_user(const uint8_t *uaddr);
@@ -59,7 +59,9 @@ void syscall_init(void)
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			  FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
-	list_init(&files);
+
+	// Project 2-4. File descriptor
+	lock_init(&file_rw_lock);
 }
 
 /* The main system call interface */
@@ -191,22 +193,33 @@ put_user(uint8_t *udst, uint8_t byte)
 	return error_code != -1;
 }
 
-static struct file *find_file_by_fd(struct list *filesPtr, int fd)
+// Project 2-4. File descriptor
+static struct file *find_file_by_fd(int fd)
 {
-	struct list_elem *e;
-	if (list_empty(filesPtr))
-	{
-		return NULL;
-	}
-	for (e = list_begin(filesPtr); e != list_end(filesPtr); e = list_next(e))
-	{
-		struct file *f = list_entry(e, struct file, elem);
-		if (f->fd == fd)
-		{
-			return f;
-		}
-	}
-	return NULL;
+	struct thread *cur = thread_current();
+
+	if (fd < 0 || fd >= cur->fdCount)
+		return NULL;		 // error - invalid fd
+	return cur->fdTable[fd]; // returns NULL if empty
+}
+
+int add_file_to_fdt(struct file *file)
+{
+	struct thread *cur = thread_current();
+	struct file **fdt = cur->fdTable; // file descriptor table
+
+	int my_fd = cur->fdCount++;
+	fdt[my_fd] = file;
+	return my_fd;
+}
+
+void remove_file_from_fdt(int fd)
+{
+	struct thread *cur = thread_current();
+	if (fd < 0 || fd >= cur->fdCount)
+		return; // error - invalid fd
+
+	cur->fdTable[fd] = NULL;
 }
 
 void halt(void)
@@ -245,26 +258,21 @@ int open(const char *file)
 		return -1;
 	}
 
-	if (find_file_by_fd(&files, fileobj->fd) != NULL)
-	{
-		fileobj == file_reopen(fileobj); //if already opened, reopen it
-	}
-
-	fileobj->fd = fd_counter;
-	fd_counter++;
-	list_push_back(&files, &fileobj->elem);
-	return fileobj->fd;
+	int fd = add_file_to_fdt(fileobj);
+	return fd;
 }
 
 int filesize(int fd)
 {
-	struct file *fileobj = find_file_by_fd(&files, fd);
+	struct file *fileobj = find_file_by_fd(fd);
 	return file_length(fileobj);
 }
 
 int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer);
+	int ret;
+
 	if (fd == 0)
 	{
 		int i;
@@ -276,51 +284,66 @@ int read(int fd, void *buffer, unsigned size)
 			if (c == '\0')
 				break;
 		}
-		return i;
+		ret = i;
 	}
 	else
 	{
-		struct file *fileobj = find_file_by_fd(&files, fd);
+		// Q. read는 동시접근 허용해도 되지 않을까?
+		lock_acquire(&file_rw_lock);
+		struct file *fileobj = find_file_by_fd(fd);
 		if (fileobj == NULL)
-			return -1;
-		return file_read(fileobj, buffer, size);
+			ret = -1;
+		else
+			ret = file_read(fileobj, buffer, size);
+		lock_release(&file_rw_lock);
 	}
+	return ret;
 }
 
 int write(int fd, const void *buffer, unsigned size)
 {
 	check_address(buffer);
+	int ret;
+
 	if (fd == 1)
 	{
 		putbuf(buffer, size);
-		return size;
+		ret = size;
 	}
 	else
 	{
-		struct file *fileobj = find_file_by_fd(&files, fd);
+		struct file *fileobj = find_file_by_fd(fd);
 		if (fileobj == NULL)
-			return -1;
-		return file_write(fileobj, buffer, size);
+			ret = -1;
+		else
+		{
+			lock_acquire(&file_rw_lock);
+			ret = file_write(fileobj, buffer, size);
+			lock_release(&file_rw_lock);
+		}
 	}
+
+	return ret;
 }
 
 void seek(int fd, unsigned position)
 {
-	struct file *fileobj = find_file_by_fd(&files, fd);
+	struct file *fileobj = find_file_by_fd(fd);
 	fileobj->pos = position;
 }
 
 unsigned tell(int fd)
 {
-	struct file *fileobj = find_file_by_fd(&files, fd);
+	struct file *fileobj = find_file_by_fd(fd);
 	return file_tell(fileobj);
 }
 void close(int fd)
 {
-	struct file *fileobj = find_file_by_fd(&files, fd);
+	struct file *fileobj = find_file_by_fd(fd);
 	if (fileobj == NULL)
 		return;
-	list_remove(&fileobj->elem);
+
+	remove_file_from_fdt(fd);
 	file_close(fileobj);
 }
 
