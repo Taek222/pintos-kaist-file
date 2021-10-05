@@ -122,6 +122,8 @@ struct thread
 	// 2-4 file descripter
 	struct file **fdTable;
 	int fdCount;
+	// 2-5 deny exec writes
+	struct file *running;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list

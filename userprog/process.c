@@ -23,6 +23,7 @@
 #endif
 
 // #define DEBUG
+//#define DEBUG_WAIT
 
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
@@ -33,6 +34,11 @@ struct thread *get_child_with_pid(int pid)
 {
 	struct thread *cur = thread_current();
 	struct list *child_list = &cur->child_list;
+
+#ifdef DEBUG_WAIT
+	//printf("\nparent children # : %d\n", list_size(child_list));
+#endif
+
 	for (struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
 	{
 		struct thread *t = list_entry(e, struct thread, child_elem);
@@ -108,6 +114,10 @@ tid_t process_fork(const char *name, struct intr_frame *if_)
 	sema_down(&child->fork_sema); // wait until child loads
 	if (child->exit_status == -1)
 		return TID_ERROR;
+
+#ifdef DEBUG_WAIT
+	printf("[process_fork] pid %d : child %s\n", tid, child->name);
+#endif
 
 	return tid;
 }
@@ -392,10 +402,27 @@ int process_wait(tid_t child_tid UNUSED)
 	// }
 
 	struct thread *cur = thread_current();
+
+#ifdef DEBUG_WAIT
+	printf("\nparent children # : %d\n", list_size(&cur->child_list));
+
+	printf("Head - ");
+	for (struct list_elem *e = list_begin(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e))
+	{
+		printf("%llx - ", e);
+	}
+	printf("Tail\n");
+#endif
+
 	struct thread *child = get_child_with_pid(child_tid);
+
 	// [Fail] Not my child
 	if (child == NULL)
 		return -1;
+
+#ifdef DEBUG_WAIT
+	printf("cur %s waits child %s - ", cur->name, child->name);
+#endif
 
 	// Parent waits until child signals (sema_up) after its execution
 	sema_down(&child->wait_sema);
@@ -405,7 +432,7 @@ int process_wait(tid_t child_tid UNUSED)
 
 	int exit_status = child->exit_status;
 
-#ifdef DEBUG
+#ifdef DEBUG_WAIT
 	printf("[process_wait] Child %d %s : exit status - %d\n", child_tid, child->name, exit_status);
 #endif
 
@@ -413,8 +440,10 @@ int process_wait(tid_t child_tid UNUSED)
 
 	// Q. 자식 프로세스의 프로세스 디스크립터 삭제??
 	// 아마 thread_create에서 palloc 한거 free 하라는 소리인 것 같다
+
+	// Keep child page so parent can get exit_status
 	list_remove(&child->child_elem);
-	//palloc_free_page(child);
+	palloc_free_page(child);
 
 	return exit_status;
 }
@@ -429,8 +458,7 @@ void process_exit(void)
 
 	struct thread *cur = thread_current();
 
-	// Close all files
-	//struct file **fdt = cur->fdTable; // file descriptor table
+	// P2-4 Close all opened files
 	for (int i = 2; i < cur->fdCount; i++)
 	{
 		close(i);
@@ -439,7 +467,13 @@ void process_exit(void)
 
 	//printf("%s: exit(%d)\n", cur->name, cur->exit_status); //#ifdef DEBUG
 
+	// P2-5 Close current executable run by this process
+	file_close(cur->running);
+
 	process_cleanup();
+
+	// Remove me from my parent's child list
+	//list_remove(&cur->child_elem);
 
 	// Wake up blocked parent
 	sema_up(&cur->wait_sema);
@@ -574,6 +608,10 @@ load(const char *file_name, struct intr_frame *if_)
 		goto done;
 	}
 
+	// Project 2-5. Deny writes to running exec
+	t->running = file;
+	file_deny_write(file);
+
 	/* Read and verify executable header. */
 	if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr || memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 || ehdr.e_machine != 0x3E // amd64
 		|| ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) || ehdr.e_phnum > 1024)
@@ -654,7 +692,7 @@ load(const char *file_name, struct intr_frame *if_)
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close(file);
+	//file_close(file); // close current running - at process_exit
 	return success;
 }
 
