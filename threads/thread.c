@@ -206,6 +206,12 @@ tid_t thread_create(const char *name, int priority,
 	/* Initialize thread. */
 	init_thread(t, name, priority);
 
+	// 2-4 File descriptor
+	t->fdTable = palloc_get_page(PAL_ZERO);
+	if (t->fdTable == NULL)
+		return TID_ERROR;
+	t->fdCount = 2; // 0 : stdin, 1 : stdout
+
 	// 1-4 MLFQS init
 	if (thread_mlfqs)
 	{
@@ -214,6 +220,10 @@ tid_t thread_create(const char *name, int priority,
 		t->priority = PRI_MAX; // priority = PRI_MAX – (recent_cpu / 4) – (nice * 2)
 	}
 	tid = t->tid = allocate_tid();
+
+	// 2-3 Parent child
+	struct thread *cur = thread_current();
+	list_push_back(&cur->child_list, &t->child_elem); // [parent] add new child to child_list
 
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
@@ -471,12 +481,17 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
 
-	// 1-3
+	// 1-3 Priority donation
 	t->basePrior = priority;
 	t->donatedPrior = -1;
 	t->waiting_lock = NULL;
-	//t->donors = malloc(sizeof(struct list));
 	list_init(&t->donors);
+
+	// 2-3 Syscalls
+	list_init(&t->child_list);
+	sema_init(&t->wait_sema, 0);
+	sema_init(&t->fork_sema, 0);
+	t->calledExec = false;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -608,7 +623,8 @@ do_schedule(int status)
 	{
 		struct thread *victim =
 			list_entry(list_pop_front(&destruction_req), struct thread, elem);
-		palloc_free_page(victim);
+
+		palloc_free_page(victim); // Project 2-3. Will be freed in 'process_wait'
 	}
 	thread_current()->status = status;
 	schedule();

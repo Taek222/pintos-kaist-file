@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 #include "threads/interrupt.h"
 #ifdef VM
 #include "vm/vm.h"
@@ -105,6 +106,22 @@ struct thread
 	// 1-4 MLFQS
 	int nice;
 	int recent_cpu;
+
+	/* Project 2 */
+	// 2-3 Parent-child hierarchy
+	struct list child_list;		 // keep children
+	struct list_elem child_elem; // used to put current thread into 'children' list
+	// 2-3 wait syscall
+	struct semaphore wait_sema; // used by parent to wait for child
+	int exit_status;			// used to deliver child exit_status to parent
+	// 2-3 fork syscall
+	struct intr_frame parent_if; // to preserve parent's intr_frame and pass it down to child in fork
+	struct semaphore fork_sema;	 // parent wait until child fork completes
+	// 2-3 exec syscall
+	bool calledExec; // notify 'process_exec' if it was called by syscall exec
+	// 2-4 file descripter
+	struct file **fdTable;
+	int fdCount;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list

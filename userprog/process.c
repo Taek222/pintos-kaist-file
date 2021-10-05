@@ -22,10 +22,25 @@
 #include "vm/vm.h"
 #endif
 
+// #define DEBUG
+
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
+
+struct thread *get_child_with_pid(int pid)
+{
+	struct thread *cur = thread_current();
+	struct list *child_list = &cur->child_list;
+	for (struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
+	{
+		struct thread *t = list_entry(e, struct thread, child_elem);
+		if (t->tid == pid)
+			return t;
+	}
+	return NULL;
+}
 
 /* General process initializer for initd and other process. */
 static void
@@ -79,11 +94,22 @@ initd(void *f_name)
 
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
-tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
+tid_t process_fork(const char *name, struct intr_frame *if_)
 {
 	/* Clone current thread to new thread.*/
-	return thread_create(name,
-						 PRI_DEFAULT, __do_fork, thread_current());
+	struct thread *cur = thread_current();
+	memcpy(&cur->parent_if, if_, sizeof(struct intr_frame)); // 여기가 잘못됨?
+
+	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, cur);
+	if (tid == TID_ERROR)
+		return TID_ERROR;
+
+	struct thread *child = get_child_with_pid(tid);
+	sema_down(&child->fork_sema); // wait until child loads
+	if (child->exit_status == -1)
+		return TID_ERROR;
+
+	return tid;
 }
 
 #ifndef VM
@@ -99,23 +125,71 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	if (is_kernel_vaddr(va))
+	{
+#ifdef DEBUG
+		//printf("[fork-duplicate] fail at step 1 %llx\n", va);
+#endif
+		return true;
+	}
+	else
+	{
+#ifdef DEBUG
+		printf("[fork-duplicate] pass at step 1 %llx\n", va);
+#endif
+	}
+
+#ifdef DEBUG
+	printf("Is user %d, is kernel %d, writable %d\n", is_user_pte(pte), is_kern_pte(pte), is_writable(pte));
+#endif
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page(parent->pml4, va);
+	if (parent_page == NULL)
+	{
+		printf("[fork-duplicate] failed to fetch page for user vaddr 'va'\n"); // #ifdef DEBUG
+		return false;
+	}
+
+#ifdef DEBUG
+	// page table, virtual address 이해
+	// 'pte' here = address pointing to one page table entry
+	// *pte = page table entry = address of the physical frame
+	void *test = ptov(PTE_ADDR(*pte)) + pg_ofs(va); // should be same as parent_page -> Yes!
+	uint64_t va_offset = pg_ofs(va);				// should be 0; va comes from PTE, so there must be no 12bit physical offset
+#endif
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
+	newpage = palloc_get_page(PAL_USER);
+	if (newpage == NULL)
+	{
+		printf("[fork-duplicate] failed to palloc new page\n"); // #ifdef DEBUG
+		return false;
+	}
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
+	memcpy(newpage, parent_page, PGSIZE);
+	writable = is_writable(pte); // *PTE is an address that points to parent_page
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page(current->pml4, va, newpage, writable))
 	{
 		/* 6. TODO: if fail to insert page, do error handling. */
+		printf("Failed to map user virtual page to given physical frame\n"); // #ifdef DEBUG
+		return false;
 	}
+
+#ifdef DEBUG
+	// is 'va' correctly mapped to newpage?
+	if (pml4_get_page(current->pml4, va) != newpage)
+		printf("Not mapped!"); // never called
+
+	printf("--Completed copy--\n");
+#endif
 	return true;
 }
 #endif
@@ -132,10 +206,16 @@ __do_fork(void *aux)
 	struct thread *current = thread_current();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if;
+	parent_if = &parent->parent_if;
 	bool succ = true;
+
+#ifdef DEBUG
+	printf("[Fork] Forking from %s to %s\n", parent->name, current->name);
+#endif
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
+	if_.R.rax = 0; // fork return value for child
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -157,14 +237,30 @@ __do_fork(void *aux)
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+	for (int i = 2; i < parent->fdCount; i++)
+	{
+		if (parent->fdTable[i] == NULL)
+			continue;
+		current->fdTable[i] = file_duplicate(parent->fdTable[i]);
+	}
+	current->fdCount = parent->fdCount;
 
 	process_init();
+
+#ifdef DEBUG
+	printf("[do_fork] %s Ready to switch!\n", current->name);
+#endif
+
+	// child loaded successfully, wake up parent
+	sema_up(&current->fork_sema);
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
 		do_iret(&if_);
 error:
-	thread_exit();
+	current->exit_status = TID_ERROR;
+	exit(TID_ERROR); // #ifdef DEBUG
+					 //thread_exit();
 }
 
 /* Switch the current execution context to the f_name.
@@ -173,6 +269,7 @@ int process_exec(void *f_name)
 {
 	char *file_name = f_name;
 	bool success;
+	struct thread *cur = thread_current();
 
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
@@ -201,19 +298,31 @@ int process_exec(void *f_name)
 	/* And then load the binary */
 	success = load(file_name, &_if);
 
+	/* If load failed, quit. */
+	if (!success)
+	{
+		if (cur->calledExec)
+			free(file_name);
+		else
+			palloc_free_page(file_name);
+
+		return -1;
+	}
+
 	// Project 2-1. Pass args - load arguments onto the user stack
 	void **rspp = &_if.rsp;
 	load_userStack(argv, argc, rspp);
 	_if.R.rdi = argc;
 	_if.R.rsi = (uint64_t)*rspp + sizeof(void *);
 
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true); // #ifdef DEBUG
+	//hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true); // #ifdef DEBUG
 	// Q. ptr to number? -> convert to int, uint64_t
 
-	/* If load failed, quit. */
-	palloc_free_page(file_name);
-	if (!success)
-		return -1;
+	//palloc_free_page(file_name);
+	if (cur->calledExec)
+		free(file_name);
+	else
+		palloc_free_page(file_name);
 
 	/* Start switched process. */
 	do_iret(&_if);
@@ -261,6 +370,7 @@ void load_userStack(char **argv, int argc, void **rspp)
 	**(void ***)rspp = (void *)0;
 }
 
+#include "threads/synch.h"
 /* Waits for thread TID to die and returns its exit status.  If
  * it was terminated by the kernel (i.e. killed due to an
  * exception), returns -1.  If TID is invalid or if it was not a
@@ -277,23 +387,62 @@ int process_wait(tid_t child_tid UNUSED)
 	 * XXX:       implementing the process_wait. */
 
 	// busy waiting #ifdef DEBUG
-	while (1)
-	{
-	}
+	// while (1)
+	// {
+	// }
 
-	return -1;
+	struct thread *cur = thread_current();
+	struct thread *child = get_child_with_pid(child_tid);
+	// [Fail] Not my child
+	if (child == NULL)
+		return -1;
+
+	// Parent waits until child signals (sema_up) after its execution
+	sema_down(&child->wait_sema);
+
+	// for (int i = 0; i < 1000000000; i++)
+	// 	;
+
+	int exit_status = child->exit_status;
+
+#ifdef DEBUG
+	printf("[process_wait] Child %d %s : exit status - %d\n", child_tid, child->name, exit_status);
+#endif
+
+	//sema_up(&cur->wait_sema); // #ifdef
+
+	// Q. 자식 프로세스의 프로세스 디스크립터 삭제??
+	// 아마 thread_create에서 palloc 한거 free 하라는 소리인 것 같다
+	list_remove(&child->child_elem);
+	//palloc_free_page(child);
+
+	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void process_exit(void)
 {
-	struct thread *curr = thread_current();
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
+	struct thread *cur = thread_current();
+
+	// Close all files
+	//struct file **fdt = cur->fdTable; // file descriptor table
+	for (int i = 2; i < cur->fdCount; i++)
+	{
+		close(i);
+	}
+	palloc_free_page(cur->fdTable);
+
+	//printf("%s: exit(%d)\n", cur->name, cur->exit_status); //#ifdef DEBUG
+
 	process_cleanup();
+
+	// Wake up blocked parent
+	sema_up(&cur->wait_sema);
 }
 
 /* Free the current process's resources. */
