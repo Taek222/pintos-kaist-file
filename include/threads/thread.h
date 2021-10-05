@@ -117,6 +117,7 @@ struct thread
 	// 2-3 fork syscall
 	struct intr_frame parent_if; // to preserve parent's intr_frame and pass it down to child in fork
 	struct semaphore fork_sema;	 // parent wait until child fork completes
+	struct semaphore free_sema;
 	// 2-3 exec syscall
 	bool calledExec; // notify 'process_exec' if it was called by syscall exec
 	// 2-4 file descripter

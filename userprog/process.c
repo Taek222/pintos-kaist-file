@@ -443,8 +443,7 @@ int process_wait(tid_t child_tid UNUSED)
 
 	// Keep child page so parent can get exit_status
 	list_remove(&child->child_elem);
-	palloc_free_page(child);
-
+	sema_up(&child->free_sema);
 	return exit_status;
 }
 
@@ -477,6 +476,7 @@ void process_exit(void)
 
 	// Wake up blocked parent
 	sema_up(&cur->wait_sema);
+	sema_down(&cur->free_sema);
 }
 
 /* Free the current process's resources. */

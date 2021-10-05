@@ -491,6 +491,7 @@ init_thread(struct thread *t, const char *name, int priority)
 	list_init(&t->child_list);
 	sema_init(&t->wait_sema, 0);
 	sema_init(&t->fork_sema, 0);
+	sema_init(&t->free_sema, 0);
 	t->calledExec = false;
 
 	// 2-5
@@ -627,7 +628,7 @@ do_schedule(int status)
 		struct thread *victim =
 			list_entry(list_pop_front(&destruction_req), struct thread, elem);
 
-		//palloc_free_page(victim); // Project 2-3. Will be freed in 'process_wait'
+		palloc_free_page(victim); // Project 2-3. Will be freed in 'process_wait'
 	}
 	thread_current()->status = status;
 	schedule();
