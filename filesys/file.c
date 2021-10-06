@@ -20,9 +20,7 @@ file_open(struct inode *inode)
 		file->is_stdout = false;
 
 		// Project2-extra
-		file->fdCount = 0;
-		file->fdArr = palloc_get_page(PAL_ZERO);
-		//list_init(&file->fdList);
+		file->dupCount = 0;
 
 		return file;
 	}
@@ -53,6 +51,11 @@ file_duplicate(struct file *file)
 		nfile->pos = file->pos;
 		if (file->deny_write)
 			file_deny_write(nfile);
+
+		// Project2-extra
+		nfile->is_stdin = file->is_stdin;
+		nfile->is_stdout = file->is_stdout;
+		nfile->dupCount = file->dupCount;
 	}
 	return nfile;
 }

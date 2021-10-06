@@ -13,19 +13,9 @@ struct file
 	//project2-extra
 	bool is_stdin;
 	bool is_stdout;
-	int fdCount;
-	int *fdArr;
-	//struct list fdList; // one open file may have several fd due to dup2 - keep track of them
+	int dupCount;
 };
 struct inode;
-
-// // project2-extra
-// // struct to be inserted into struct file fdList
-// struct fdElem
-// {
-// 	int fd;
-// 	struct list_elem elem;
-// }
 
 /* Opening and closing files. */
 struct file *

@@ -204,6 +204,13 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 }
 #endif
 
+// Project2-extra
+struct Map
+{
+	uintptr_t key;
+	uintptr_t value;
+};
+
 /* A thread function that copies parent's execution context.
  * Hint) parent->tf does not hold the userland context of the process.
  *       That is, you are required to pass second argument of process_fork to
@@ -252,11 +259,44 @@ __do_fork(void *aux)
 	if (parent->fdCount == FDCOUNT_LIMIT)
 		goto error;
 
-	for (int i = 2; i < parent->fdCount; i++)
+	// Project2-extra
+	const int MAPLEN = 10;
+	struct Map map[10];
+	int dupCount = 0;
+
+	//for (int i = 2; i < parent->fdCount; i++)
+	for (int i = 0; i < FDCOUNT_LIMIT; i++)
 	{
-		if (parent->fdTable[i] == NULL)
+		struct file *file = parent->fdTable[i];
+		if (file == NULL)
 			continue;
-		current->fdTable[i] = file_duplicate(parent->fdTable[i]);
+
+		// Project2-extra) linear search on key-pair array
+		bool found = false;
+		for (int j = 0; j < MAPLEN; j++)
+		{
+			if (map[j].key == file)
+			{
+				found = true;
+				current->fdTable[i] = map[j].value;
+				break;
+			}
+		}
+		if (!found)
+		{
+			struct file *new_file;
+			if (file > 2)
+				new_file = file_duplicate(file);
+			else
+				new_file = file; // 1 stdin, 2 stdout
+
+			current->fdTable[i] = new_file;
+			if (dupCount < MAPLEN)
+			{
+				map[dupCount].key = file;
+				map[dupCount++].value = new_file;
+			}
+		}
 	}
 	current->fdCount = parent->fdCount;
 
@@ -272,6 +312,7 @@ __do_fork(void *aux)
 	/* Finally, switch to the newly created process. */
 	if (succ)
 		do_iret(&if_);
+
 error:
 	current->exit_status = TID_ERROR;
 	sema_up(&current->fork_sema);
@@ -464,7 +505,8 @@ void process_exit(void)
 	struct thread *cur = thread_current();
 
 	// P2-4 Close all opened files
-	for (int i = 2; i < cur->fdCount; i++)
+	//for (int i = 2; i < cur->fdCount; i++)
+	for (int i = 0; i < FDCOUNT_LIMIT; i++)
 	{
 		close(i);
 	}

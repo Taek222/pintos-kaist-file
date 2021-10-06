@@ -16,11 +16,14 @@
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 
-int fd_counter = 2; //0,1 is used for stdio
-struct list files;	//list of open files
+//int fd_counter = 2; //0,1 is used for stdio
+//struct list files;	//list of open files
 static struct file *find_file_by_fd(int fd);
-bool stdin_close = false;
-bool stdout_close = false;
+// Project2-extra
+int stdin_count = 1;
+int stdout_count = 1;
+const int STDIN = 1;
+const int STDOUT = 1;
 
 void check_address(uaddr);
 static int64_t get_user(const uint8_t *uaddr);
@@ -35,7 +38,7 @@ int read(int fd, void *buffer, unsigned size);
 int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
-void close(int fd, bool do_file_close);
+void close(int fd);
 int dup2(int oldfd, int newfd);
 
 /* System call.
@@ -141,7 +144,7 @@ void syscall_handler(struct intr_frame *f)
 		f->R.rax = tell(f->R.rdi);
 		break;
 	case SYS_CLOSE:
-		close(f->R.rdi, true);
+		close(f->R.rdi);
 		break;
 	case SYS_DUP2:
 		f->R.rax = dup2(f->R.rdi, f->R.rsi);
@@ -218,6 +221,8 @@ int add_file_to_fdt(struct file *file)
 		return -1;
 
 	int my_fd = cur->fdCount++;
+	while (fdt[my_fd])
+		my_fd = cur->fdCount++;
 	fdt[my_fd] = file;
 	return my_fd;
 }
@@ -273,10 +278,6 @@ int open(const char *file)
 	if (fd == -1)
 		file_close(fileobj);
 
-	// Project2-extra
-	fileobj->fdArr[0] = fd;
-	fileobj->fdCount++;
-
 	return fd;
 }
 
@@ -297,9 +298,9 @@ int read(int fd, void *buffer, unsigned size)
 	if (fileobj == NULL)
 		return -1;
 
-	if (fd == 0 || fileobj == 1 || fileobj->is_stdin)
+	if (fileobj == 1 || fileobj->is_stdin)
 	{
-		if (stdin_close)
+		if (stdin_count == 0)
 		{
 			remove_file_from_fdt(fd);
 			ret = -1;
@@ -337,9 +338,9 @@ int write(int fd, const void *buffer, unsigned size)
 	if (fileobj == NULL)
 		return -1;
 
-	if (fd == 1 || fileobj == 2 || fileobj->is_stdout)
+	if (fileobj == 2 || fileobj->is_stdout)
 	{
-		if (stdout_close)
+		if (stdout_count == 0)
 		{
 			remove_file_from_fdt(fd);
 			ret = -1;
@@ -363,15 +364,20 @@ int write(int fd, const void *buffer, unsigned size)
 void seek(int fd, unsigned position)
 {
 	struct file *fileobj = find_file_by_fd(fd);
+	if (fileobj <= 2)
+		return;
 	fileobj->pos = position;
 }
 
 unsigned tell(int fd)
 {
 	struct file *fileobj = find_file_by_fd(fd);
+	if (fileobj <= 2)
+		return;
 	return file_tell(fileobj);
 }
-void close(int fd, bool do_file_close)
+
+void close(int fd)
 {
 	struct file *fileobj = find_file_by_fd(fd);
 	if (fileobj == NULL)
@@ -379,21 +385,21 @@ void close(int fd, bool do_file_close)
 
 	if (fd == 0 || fileobj == 1 || (fileobj > 2 && fileobj->is_stdin))
 	{
-		stdin_close = true;
+		stdin_count--;
 	}
 	else if (fd == 1 || fileobj == 2 || (fileobj > 2 && fileobj->is_stdout))
 	{
-		stdout_close = true;
+		stdout_count--;
 	}
 
 	remove_file_from_fdt(fd);
-	if (fd <= 1 || fileobj <= 2 || !do_file_close)
+	if (fd <= 1 || fileobj <= 2)
 		return;
 
-	for (int i = 0; i < fileobj->fdCount; i++)
-		remove_file_from_fdt(fileobj->fdArr[i]);
-
-	file_close(fileobj);
+	if (fileobj->dupCount == 0)
+		file_close(fileobj);
+	else
+		fileobj->dupCount--;
 }
 
 int dup2(int oldfd, int newfd)
@@ -414,12 +420,17 @@ int dup2(int oldfd, int newfd)
 	struct thread *cur = thread_current();
 	struct file **fdt = cur->fdTable;
 
+	// Copy stdin or stdout to another fd
 	if (oldfd == 0 || fileobj == 1 || (fileobj > 2 && fileobj->is_stdin)) // stdin itself or copied fd
 	{
 		if (deadfile != NULL)
 			deadfile->is_stdin = true;
 		else
+		{
 			fdt[newfd] = 1;
+			cur->fdCount++;
+		}
+		stdin_count++;
 		return newfd;
 	}
 	if (oldfd == 1 || fileobj == 2 || (fileobj > 2 && fileobj->is_stdout)) // stdout itself or copied fd
@@ -427,14 +438,21 @@ int dup2(int oldfd, int newfd)
 		if (deadfile != NULL)
 			deadfile->is_stdout = true;
 		else
+		{
 			fdt[newfd] = 2;
+			cur->fdCount++;
+		}
+		stdout_count++;
 		return newfd;
 	}
 
 	// test case does not open new files after dup2 so don't care about modifying add/remove functions
 
-	close(newfd, false); //close will handle all error cases
-	fileobj->fdArr[fileobj->fdCount++] = newfd;
+	if (deadfile == NULL)
+		cur->fdCount++;
+
+	close(newfd); //close will handle all error cases
+	fileobj->dupCount++;
 	fdt[newfd] = fileobj;
 	return newfd;
 }
