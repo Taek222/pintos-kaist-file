@@ -10,6 +10,9 @@ struct file
 	struct inode *inode; /* File's inode. */
 	off_t pos;			 /* Current position. */
 	bool deny_write;	 /* Has file_deny_write() been called? */
+	//project2-extra
+	bool is_stdin;
+	bool is_stdout;
 };
 struct inode;
 

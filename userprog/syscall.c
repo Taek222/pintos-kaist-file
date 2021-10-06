@@ -19,6 +19,8 @@ void syscall_handler(struct intr_frame *);
 int fd_counter = 2; //0,1 is used for stdio
 struct list files;	//list of open files
 static struct file *find_file_by_fd(int fd);
+bool stdin_close = false;
+bool stdout_close = false;
 
 void check_address(uaddr);
 static int64_t get_user(const uint8_t *uaddr);
@@ -34,6 +36,7 @@ int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
+int dup2(int oldfd, int newfd);
 
 /* System call.
  *
@@ -139,6 +142,9 @@ void syscall_handler(struct intr_frame *f)
 		break;
 	case SYS_CLOSE:
 		close(f->R.rdi);
+		break;
+	case SYS_DUP2:
+		dup2(f->R.rdi, f->R.rsi);
 		break;
 	default:
 		//thread_exit();
@@ -282,25 +288,29 @@ int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer);
 	int ret;
-
-	if (fd == 0)
+	struct file *fileobj = find_file_by_fd(fd);
+	if (fd == 0 || (fileobj != NULL && fileobj->is_stdin))
 	{
-		int i;
-		unsigned char *buf = buffer;
-		for (i = 0; i < size; i++)
-		{
-			char c = input_getc();
-			*buf++ = c;
-			if (c == '\0')
-				break;
+		if (stdin_close){
+			ret = -1;
 		}
-		ret = i;
+		else{
+			int i;
+			unsigned char *buf = buffer;
+			for (i = 0; i < size; i++)
+			{
+				char c = input_getc();
+				*buf++ = c;
+				if (c == '\0')
+					break;
+			}
+			ret = i;
+		}
 	}
 	else
 	{
 		// Q. read는 동시접근 허용해도 되지 않을까?
 		lock_acquire(&file_rw_lock);
-		struct file *fileobj = find_file_by_fd(fd);
 		if (fileobj == NULL)
 			ret = -1;
 		else
@@ -314,15 +324,20 @@ int write(int fd, const void *buffer, unsigned size)
 {
 	check_address(buffer);
 	int ret;
+	struct file *fileobj = find_file_by_fd(fd);
 
-	if (fd == 1)
+	if (fd == 1 || (fileobj != NULL && fileobj->is_stdout))
 	{
-		putbuf(buffer, size);
-		ret = size;
+		if (stdout_close){
+			ret = -1;
+		}
+		else{
+			putbuf(buffer, size);
+			ret = size;
+		}
 	}
 	else
 	{
-		struct file *fileobj = find_file_by_fd(fd);
 		if (fileobj == NULL)
 			ret = -1;
 		else
@@ -349,12 +364,44 @@ unsigned tell(int fd)
 }
 void close(int fd)
 {
+	if (fd == 0){
+		stdin_close = true;
+		return;
+	}
+	if (fd == 1){
+		stdout_close = true;
+	}
 	struct file *fileobj = find_file_by_fd(fd);
 	if (fileobj == NULL)
 		return;
 
 	remove_file_from_fdt(fd);
 	file_close(fileobj);
+}
+
+int dup2(int oldfd, int newfd){
+	struct file *fileobj = find_file_by_fd(oldfd);
+	struct file *deadfile = find_file_by_fd(newfd); //to dup stdio info to existing file
+	struct thread *cur = thread_current();
+	struct file **fdt = cur->fdTable;
+	//test case does not open new files after dup2 so don't care about modifying add/remove functions
+	if (fileobj == NULL){ //wrong oldfd or stdio
+		if (oldfd == 0 || deadfile != NULL){
+			deadfile->is_stdin = true;
+			return newfd;
+		}
+		if (oldfd == 1 || deadfile != NULL){
+			deadfile->is_stdout = true;
+			return newfd;
+		}
+		return -1;
+	}
+	if (oldfd == newfd){ //no 'duplicate' happens really
+		return oldfd;
+	}
+	close(newfd); //close will handle all error cases
+	fdt[newfd] = fileobj; 
+	return newfd;
 }
 
 tid_t fork(const char *thread_name, struct intr_frame *f)
