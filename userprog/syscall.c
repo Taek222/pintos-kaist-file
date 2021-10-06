@@ -97,7 +97,7 @@ void syscall_handler(struct intr_frame *f)
 		exit(f->R.rdi);
 		break;
 	case SYS_FORK:
-		f->R.rax = process_fork(f->R.rdi, f);
+		f->R.rax = fork(f->R.rdi, f);
 		break;
 	case SYS_EXEC:
 		// writable = is_kernel_vaddr(f->R.rdi); //is_writable((uint64_t *)f->R.rdi);
@@ -208,6 +208,9 @@ int add_file_to_fdt(struct file *file)
 	struct thread *cur = thread_current();
 	struct file **fdt = cur->fdTable; // file descriptor table
 
+	if (cur->fdCount >= FDCOUNT_LIMIT)
+		return -1;
+
 	int my_fd = cur->fdCount++;
 	fdt[my_fd] = file;
 	return my_fd;
@@ -259,12 +262,19 @@ int open(const char *file)
 	}
 
 	int fd = add_file_to_fdt(fileobj);
+
+	// FD table full
+	if (fd == -1)
+		file_close(fileobj);
+
 	return fd;
 }
 
 int filesize(int fd)
 {
 	struct file *fileobj = find_file_by_fd(fd);
+	if (fileobj == NULL)
+		return -1;
 	return file_length(fileobj);
 }
 
@@ -347,41 +357,10 @@ void close(int fd)
 	file_close(fileobj);
 }
 
-tid_t fork(const char *thread_name)
+tid_t fork(const char *thread_name, struct intr_frame *f)
 {
-	// create new process (thread?) with the given name -> thread_create? process_create_initd?
-	tid_t tid = process_create_initd(thread_name);
-	if (tid == TID_ERROR)
-		return TID_ERROR;
-
-	// clone callee-saved registers
-	struct thread *parent = thread_current();
-	struct thread *child = get_child_with_pid(tid);
-	child->tf.rsp = parent->tf.rsp;
-	child->tf.R.rbx = parent->tf.R.rbx;
-	child->tf.R.rbp = parent->tf.R.rbp;
-	child->tf.R.r12 = parent->tf.R.r12;
-	child->tf.R.r13 = parent->tf.R.r13;
-	child->tf.R.r14 = parent->tf.R.r14;
-	child->tf.R.r15 = parent->tf.R.r15;
-
-	// duplicate resources - files descriptors (fd?) and VM space (pml4_for_each)
-	child->pml4 = parent->pml4;
-	//pml4_for_each(parent->pml4, copy_page, child);
-
-	// child return val
-	child->tf.R.rax = 0;
-	return tid;
+	return process_fork(thread_name, f);
 }
-
-// static bool
-// copy_page (uint64_t *pte, void *va,  void *aux) {
-//         if (is_user_vaddr (va)){
-// 			child->pml4
-// 		}
-// 			printf ("user page: %llx\n", va);
-//         return true;
-// }
 
 int exec(char *file_name)
 {

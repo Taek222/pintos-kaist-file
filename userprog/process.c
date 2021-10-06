@@ -247,6 +247,11 @@ __do_fork(void *aux)
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+
+	// Failed to duplicate?
+	if (parent->fdCount == FDCOUNT_LIMIT)
+		goto error;
+
 	for (int i = 2; i < parent->fdCount; i++)
 	{
 		if (parent->fdTable[i] == NULL)
@@ -269,6 +274,7 @@ __do_fork(void *aux)
 		do_iret(&if_);
 error:
 	current->exit_status = TID_ERROR;
+	sema_up(&current->fork_sema);
 	exit(TID_ERROR); // #ifdef DEBUG
 					 //thread_exit();
 }
@@ -462,7 +468,8 @@ void process_exit(void)
 	{
 		close(i);
 	}
-	palloc_free_page(cur->fdTable);
+	//palloc_free_page(cur->fdTable);
+	palloc_free_multiple(cur->fdTable, FDT_PAGES);
 
 	//printf("%s: exit(%d)\n", cur->name, cur->exit_status); //#ifdef DEBUG
 
