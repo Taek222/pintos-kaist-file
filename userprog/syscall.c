@@ -35,7 +35,7 @@ int read(int fd, void *buffer, unsigned size);
 int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
-void close(int fd);
+void close(int fd, bool do_file_close);
 int dup2(int oldfd, int newfd);
 
 /* System call.
@@ -141,10 +141,10 @@ void syscall_handler(struct intr_frame *f)
 		f->R.rax = tell(f->R.rdi);
 		break;
 	case SYS_CLOSE:
-		close(f->R.rdi);
+		close(f->R.rdi, true);
 		break;
 	case SYS_DUP2:
-		dup2(f->R.rdi, f->R.rsi);
+		f->R.rax = dup2(f->R.rdi, f->R.rsi);
 		break;
 	default:
 		//thread_exit();
@@ -204,9 +204,9 @@ static struct file *find_file_by_fd(int fd)
 {
 	struct thread *cur = thread_current();
 
-	if (fd < 0 || fd >= cur->fdCount)
-		return NULL;		 // error - invalid fd
-	return cur->fdTable[fd]; // returns NULL if empty
+	if (fd < 0 || fd >= FDCOUNT_LIMIT) // fd >= cur->fdCount
+		return NULL;				   // error - invalid fd
+	return cur->fdTable[fd];		   // returns NULL if empty
 }
 
 int add_file_to_fdt(struct file *file)
@@ -225,8 +225,8 @@ int add_file_to_fdt(struct file *file)
 void remove_file_from_fdt(int fd)
 {
 	struct thread *cur = thread_current();
-	if (fd < 0 || fd >= cur->fdCount)
-		return; // error - invalid fd
+	if (fd < 0 || fd >= FDCOUNT_LIMIT) // fd >= cur->fdCount
+		return;						   // error - invalid fd
 
 	cur->fdTable[fd] = NULL;
 }
@@ -273,6 +273,10 @@ int open(const char *file)
 	if (fd == -1)
 		file_close(fileobj);
 
+	// Project2-extra
+	fileobj->fdArr[0] = fd;
+	fileobj->fdCount++;
+
 	return fd;
 }
 
@@ -288,13 +292,20 @@ int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer);
 	int ret;
+
 	struct file *fileobj = find_file_by_fd(fd);
-	if (fd == 0 || (fileobj != NULL && fileobj->is_stdin))
+	if (fileobj == NULL)
+		return -1;
+
+	if (fd == 0 || fileobj == 1 || fileobj->is_stdin)
 	{
-		if (stdin_close){
+		if (stdin_close)
+		{
+			remove_file_from_fdt(fd);
 			ret = -1;
 		}
-		else{
+		else
+		{
 			int i;
 			unsigned char *buf = buffer;
 			for (i = 0; i < size; i++)
@@ -311,10 +322,7 @@ int read(int fd, void *buffer, unsigned size)
 	{
 		// Q. read는 동시접근 허용해도 되지 않을까?
 		lock_acquire(&file_rw_lock);
-		if (fileobj == NULL)
-			ret = -1;
-		else
-			ret = file_read(fileobj, buffer, size);
+		ret = file_read(fileobj, buffer, size);
 		lock_release(&file_rw_lock);
 	}
 	return ret;
@@ -324,28 +332,29 @@ int write(int fd, const void *buffer, unsigned size)
 {
 	check_address(buffer);
 	int ret;
-	struct file *fileobj = find_file_by_fd(fd);
 
-	if (fd == 1 || (fileobj != NULL && fileobj->is_stdout))
+	struct file *fileobj = find_file_by_fd(fd);
+	if (fileobj == NULL)
+		return -1;
+
+	if (fd == 1 || fileobj == 2 || fileobj->is_stdout)
 	{
-		if (stdout_close){
+		if (stdout_close)
+		{
+			remove_file_from_fdt(fd);
 			ret = -1;
 		}
-		else{
+		else
+		{
 			putbuf(buffer, size);
 			ret = size;
 		}
 	}
 	else
 	{
-		if (fileobj == NULL)
-			ret = -1;
-		else
-		{
-			lock_acquire(&file_rw_lock);
-			ret = file_write(fileobj, buffer, size);
-			lock_release(&file_rw_lock);
-		}
+		lock_acquire(&file_rw_lock);
+		ret = file_write(fileobj, buffer, size);
+		lock_release(&file_rw_lock);
 	}
 
 	return ret;
@@ -362,45 +371,71 @@ unsigned tell(int fd)
 	struct file *fileobj = find_file_by_fd(fd);
 	return file_tell(fileobj);
 }
-void close(int fd)
+void close(int fd, bool do_file_close)
 {
-	if (fd == 0){
-		stdin_close = true;
-		return;
-	}
-	if (fd == 1){
-		stdout_close = true;
-	}
 	struct file *fileobj = find_file_by_fd(fd);
 	if (fileobj == NULL)
 		return;
 
+	if (fd == 0 || fileobj == 1 || (fileobj > 2 && fileobj->is_stdin))
+	{
+		stdin_close = true;
+	}
+	else if (fd == 1 || fileobj == 2 || (fileobj > 2 && fileobj->is_stdout))
+	{
+		stdout_close = true;
+	}
+
 	remove_file_from_fdt(fd);
+	if (fd <= 1 || fileobj <= 2 || !do_file_close)
+		return;
+
+	for (int i = 0; i < fileobj->fdCount; i++)
+		remove_file_from_fdt(fileobj->fdArr[i]);
+
 	file_close(fileobj);
 }
 
-int dup2(int oldfd, int newfd){
+int dup2(int oldfd, int newfd)
+{
 	struct file *fileobj = find_file_by_fd(oldfd);
+	if (fileobj == NULL)
+		return -1;
+
 	struct file *deadfile = find_file_by_fd(newfd); //to dup stdio info to existing file
+	// if(deadfile)
+	// 	close(newfd);
+	// oldfd == newfd 인 경우
+
+	//no 'duplicate' happens really
+	if (oldfd == newfd)
+		return newfd;
+
 	struct thread *cur = thread_current();
 	struct file **fdt = cur->fdTable;
-	//test case does not open new files after dup2 so don't care about modifying add/remove functions
-	if (fileobj == NULL){ //wrong oldfd or stdio
-		if (oldfd == 0 || deadfile != NULL){
+
+	if (oldfd == 0 || fileobj == 1 || (fileobj > 2 && fileobj->is_stdin)) // stdin itself or copied fd
+	{
+		if (deadfile != NULL)
 			deadfile->is_stdin = true;
-			return newfd;
-		}
-		if (oldfd == 1 || deadfile != NULL){
+		else
+			fdt[newfd] = 1;
+		return newfd;
+	}
+	if (oldfd == 1 || fileobj == 2 || (fileobj > 2 && fileobj->is_stdout)) // stdout itself or copied fd
+	{
+		if (deadfile != NULL)
 			deadfile->is_stdout = true;
-			return newfd;
-		}
-		return -1;
+		else
+			fdt[newfd] = 2;
+		return newfd;
 	}
-	if (oldfd == newfd){ //no 'duplicate' happens really
-		return oldfd;
-	}
-	close(newfd); //close will handle all error cases
-	fdt[newfd] = fileobj; 
+
+	// test case does not open new files after dup2 so don't care about modifying add/remove functions
+
+	close(newfd, false); //close will handle all error cases
+	fileobj->fdArr[fileobj->fdCount++] = newfd;
+	fdt[newfd] = fileobj;
 	return newfd;
 }
 
