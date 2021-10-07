@@ -122,7 +122,7 @@ struct thread
 	bool calledExec; // notify 'process_exec' if it was called by syscall exec
 	// 2-4 file descripter
 	struct file **fdTable;
-	int fdCount; // used as both an index of an open spot and a count for the number of open files in fdT
+	int fdIdx; // an index of an open spot in fdTable
 	// 2-5 deny exec writes
 	struct file *running;
 	// 2-extra
@@ -203,6 +203,6 @@ int load_avg;
 
 // 2-4 syscall - fork
 #define FDT_PAGES 3						  // pages to allocate for file descriptor tables (thread_create, process_exit)
-#define FDCOUNT_LIMIT FDT_PAGES *(1 << 9) // Limit fdCount
+#define FDCOUNT_LIMIT FDT_PAGES *(1 << 9) // Limit fdIdx
 
 #endif /* threads/thread.h */

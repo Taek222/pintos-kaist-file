@@ -205,7 +205,7 @@ static struct file *find_file_by_fd(int fd)
 {
 	struct thread *cur = thread_current();
 
-	if (fd < 0 || fd >= FDCOUNT_LIMIT) // fd >= cur->fdCount
+	if (fd < 0 || fd >= FDCOUNT_LIMIT) // fd >= cur->fdIdx
 		return NULL;				   // error - invalid fd
 	return cur->fdTable[fd];		   // returns NULL if empty
 }
@@ -216,29 +216,20 @@ int add_file_to_fdt(struct file *file)
 	struct file **fdt = cur->fdTable; // file descriptor table
 
 	// Project2-extra - (multi-oom) Find open spot from the front
-	cur->fdCount = FDCOUNT_LIMIT;
-	for (int i = 0; i < FDCOUNT_LIMIT; i++)
-	{
-		if (fdt[i] == NULL)
-		{
-			cur->fdCount = i;
-			break;
-		}
-	}
+	while (cur->fdIdx < FDCOUNT_LIMIT && fdt[cur->fdIdx])
+		cur->fdIdx++;
 
-	if (cur->fdCount >= FDCOUNT_LIMIT)
+	if (cur->fdIdx >= FDCOUNT_LIMIT)
 		return -1;
 
-	fdt[cur->fdCount] = file;
-	// while (fdt[my_fd])
-	// 	my_fd = cur->fdCount++;
-	return cur->fdCount;
+	fdt[cur->fdIdx] = file;
+	return cur->fdIdx;
 }
 
 void remove_file_from_fdt(int fd)
 {
 	struct thread *cur = thread_current();
-	if (fd < 0 || fd >= FDCOUNT_LIMIT) // fd >= cur->fdCount
+	if (fd < 0 || fd >= FDCOUNT_LIMIT) // fd >= cur->fdIdx
 		return;						   // error - invalid fd
 
 	cur->fdTable[fd] = NULL;
@@ -276,9 +267,7 @@ int open(const char *file)
 	struct file *fileobj = filesys_open(file);
 
 	if (fileobj == NULL)
-	{
 		return -1;
-	}
 
 	int fd = add_file_to_fdt(fileobj);
 
@@ -448,7 +437,7 @@ int dup2(int oldfd, int newfd)
 		close(newfd);
 
 		fdt[newfd] = 1;
-		//cur->fdCount++;
+		//cur->fdIdx++;
 
 		cur->stdin_count++;
 		return newfd;
@@ -458,7 +447,7 @@ int dup2(int oldfd, int newfd)
 		close(newfd);
 
 		fdt[newfd] = 2;
-		//cur->fdCount++;
+		//cur->fdIdx++;
 
 		cur->stdout_count++;
 		return newfd;
@@ -467,7 +456,7 @@ int dup2(int oldfd, int newfd)
 	// test case does not open new files after dup2 so don't care about modifying add/remove functions
 
 	// if (deadfile == NULL)
-	// 	cur->fdCount++;
+	// 	cur->fdIdx++;
 
 	close(newfd); //close will handle all error cases
 	fileobj->dupCount++;

@@ -256,7 +256,7 @@ __do_fork(void *aux)
 	 * TODO:       the resources of parent.*/
 
 	// Failed to duplicate?
-	if (parent->fdCount == FDCOUNT_LIMIT)
+	if (parent->fdIdx == FDCOUNT_LIMIT)
 		goto error;
 
 	// Project2-extra
@@ -264,7 +264,7 @@ __do_fork(void *aux)
 	struct Map map[10];
 	int dupCount = 0;
 
-	//for (int i = 2; i < parent->fdCount; i++)
+	//for (int i = 2; i < parent->fdIdx; i++)
 	for (int i = 0; i < FDCOUNT_LIMIT; i++)
 	{
 		struct file *file = parent->fdTable[i];
@@ -298,7 +298,7 @@ __do_fork(void *aux)
 			}
 		}
 	}
-	current->fdCount = parent->fdCount;
+	current->fdIdx = parent->fdIdx;
 
 	process_init();
 
@@ -505,7 +505,7 @@ void process_exit(void)
 	struct thread *cur = thread_current();
 
 	// P2-4 Close all opened files
-	//for (int i = 2; i < cur->fdCount; i++)
+	//for (int i = 2; i < cur->fdIdx; i++)
 	for (int i = 0; i < FDCOUNT_LIMIT; i++)
 	{
 		close(i);

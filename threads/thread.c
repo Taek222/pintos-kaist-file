@@ -211,7 +211,7 @@ tid_t thread_create(const char *name, int priority,
 	t->fdTable = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
 	if (t->fdTable == NULL)
 		return TID_ERROR;
-	t->fdCount = 2; // 0 : stdin, 1 : stdout
+	t->fdIdx = 2; // 0 : stdin, 1 : stdout
 	// 2-extra
 	t->fdTable[0] = 1; // dummy values to distinguish fd 0 and 1 from NULL
 	t->fdTable[1] = 2;
