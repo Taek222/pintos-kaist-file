@@ -10,11 +10,14 @@ struct file
 	struct inode *inode; /* File's inode. */
 	off_t pos;			 /* Current position. */
 	bool deny_write;	 /* Has file_deny_write() been called? */
+	//project2-extra
+	int dupCount; // how many fds share this file? only really 'close' this file when dupCount == 0
 };
 struct inode;
 
 /* Opening and closing files. */
-struct file *file_open(struct inode *);
+struct file *
+file_open(struct inode *);
 struct file *file_reopen(struct file *);
 struct file *file_duplicate(struct file *file);
 void file_close(struct file *);

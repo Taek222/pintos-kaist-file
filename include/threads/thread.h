@@ -115,13 +115,18 @@ struct thread
 	struct semaphore wait_sema; // used by parent to wait for child
 	int exit_status;			// used to deliver child exit_status to parent
 	// 2-3 fork syscall
-	struct intr_frame parent_if; // to preserve parent's intr_frame and pass it down to child in fork
-	struct semaphore fork_sema;	 // parent wait until child fork completes
-	// 2-3 exec syscall
-	bool calledExec; // notify 'process_exec' if it was called by syscall exec
+	struct intr_frame parent_if; // to preserve my current intr_frame and pass it down to child in fork ('parent_if' in child's perspective)
+	struct semaphore fork_sema;	 // parent wait (process_wait) until child fork completes (__do_fork)
+	struct semaphore free_sema;	 // Postpone child termination (process_exit) until parent receives its exit_status in 'wait' (process_wait)
 	// 2-4 file descripter
-	struct file **fdTable;
-	int fdCount;
+	struct file **fdTable; // allocation in threac_create (thread.c)
+	int fdIdx;			   // an index of an open spot in fdTable
+	// 2-5 deny exec writes
+	struct file *running; // executable ran by current process (process.c load, process_exit)
+	// 2-extra - count the number of open stdin/stdout
+	// dup2 may copy stdin or stdout; stdin or stdout is not really closed until these counts goes 0
+	int stdin_count;
+	int stdout_count;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list
@@ -194,5 +199,9 @@ void update_load_avg();
 void total_update_priority();
 void thread_update_priority(struct thread *t);
 int load_avg;
+
+// 2-4 syscall - fork
+#define FDT_PAGES 3						  // pages to allocate for file descriptor tables (thread_create, process_exit)
+#define FDCOUNT_LIMIT FDT_PAGES *(1 << 9) // Limit fdIdx
 
 #endif /* threads/thread.h */
