@@ -20,10 +20,8 @@ void syscall_handler(struct intr_frame *);
 //struct list files;	//list of open files
 static struct file *find_file_by_fd(int fd);
 // Project2-extra
-int stdin_count = 1;
-int stdout_count = 1;
 const int STDIN = 1;
-const int STDOUT = 1;
+const int STDOUT = 2;
 
 void check_address(uaddr);
 static int64_t get_user(const uint8_t *uaddr);
@@ -217,14 +215,24 @@ int add_file_to_fdt(struct file *file)
 	struct thread *cur = thread_current();
 	struct file **fdt = cur->fdTable; // file descriptor table
 
+	// Project2-extra - (multi-oom) Find open spot from the front
+	cur->fdCount = FDCOUNT_LIMIT;
+	for (int i = 0; i < FDCOUNT_LIMIT; i++)
+	{
+		if (fdt[i] == NULL)
+		{
+			cur->fdCount = i;
+			break;
+		}
+	}
+
 	if (cur->fdCount >= FDCOUNT_LIMIT)
 		return -1;
 
-	int my_fd = cur->fdCount++;
-	while (fdt[my_fd])
-		my_fd = cur->fdCount++;
-	fdt[my_fd] = file;
-	return my_fd;
+	fdt[cur->fdCount] = file;
+	// while (fdt[my_fd])
+	// 	my_fd = cur->fdCount++;
+	return cur->fdCount;
 }
 
 void remove_file_from_fdt(int fd)
@@ -293,15 +301,17 @@ int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer);
 	int ret;
+	struct thread *cur = thread_current();
 
 	struct file *fileobj = find_file_by_fd(fd);
 	if (fileobj == NULL)
 		return -1;
 
-	if (fileobj == 1 || fileobj->is_stdin)
+	if (fileobj == STDIN)
 	{
-		if (stdin_count == 0)
+		if (cur->stdin_count == 0)
 		{
+			// Not reachable
 			remove_file_from_fdt(fd);
 			ret = -1;
 		}
@@ -318,6 +328,10 @@ int read(int fd, void *buffer, unsigned size)
 			}
 			ret = i;
 		}
+	}
+	else if (fileobj == STDOUT)
+	{
+		ret = -1;
 	}
 	else
 	{
@@ -338,9 +352,11 @@ int write(int fd, const void *buffer, unsigned size)
 	if (fileobj == NULL)
 		return -1;
 
-	if (fileobj == 2 || fileobj->is_stdout)
+	struct thread *cur = thread_current();
+
+	if (fileobj == STDOUT)
 	{
-		if (stdout_count == 0)
+		if (cur->stdout_count == 0)
 		{
 			remove_file_from_fdt(fd);
 			ret = -1;
@@ -350,6 +366,10 @@ int write(int fd, const void *buffer, unsigned size)
 			putbuf(buffer, size);
 			ret = size;
 		}
+	}
+	else if (fileobj == STDIN)
+	{
+		ret = -1;
 	}
 	else
 	{
@@ -383,13 +403,15 @@ void close(int fd)
 	if (fileobj == NULL)
 		return;
 
-	if (fd == 0 || fileobj == 1 || (fileobj > 2 && fileobj->is_stdin))
+	struct thread *cur = thread_current();
+
+	if (fd == 0 || fileobj == STDIN)
 	{
-		stdin_count--;
+		cur->stdin_count--;
 	}
-	else if (fd == 1 || fileobj == 2 || (fileobj > 2 && fileobj->is_stdout))
+	else if (fd == 1 || fileobj == STDOUT)
 	{
-		stdout_count--;
+		cur->stdout_count--;
 	}
 
 	remove_file_from_fdt(fd);
@@ -421,35 +443,31 @@ int dup2(int oldfd, int newfd)
 	struct file **fdt = cur->fdTable;
 
 	// Copy stdin or stdout to another fd
-	if (oldfd == 0 || fileobj == 1 || (fileobj > 2 && fileobj->is_stdin)) // stdin itself or copied fd
+	if (oldfd == 0 || fileobj == STDIN) // stdin itself or copied fd
 	{
-		if (deadfile != NULL)
-			deadfile->is_stdin = true;
-		else
-		{
-			fdt[newfd] = 1;
-			cur->fdCount++;
-		}
-		stdin_count++;
+		close(newfd);
+
+		fdt[newfd] = 1;
+		//cur->fdCount++;
+
+		cur->stdin_count++;
 		return newfd;
 	}
-	if (oldfd == 1 || fileobj == 2 || (fileobj > 2 && fileobj->is_stdout)) // stdout itself or copied fd
+	if (oldfd == 1 || fileobj == STDOUT) // stdout itself or copied fd
 	{
-		if (deadfile != NULL)
-			deadfile->is_stdout = true;
-		else
-		{
-			fdt[newfd] = 2;
-			cur->fdCount++;
-		}
-		stdout_count++;
+		close(newfd);
+
+		fdt[newfd] = 2;
+		//cur->fdCount++;
+
+		cur->stdout_count++;
 		return newfd;
 	}
 
 	// test case does not open new files after dup2 so don't care about modifying add/remove functions
 
-	if (deadfile == NULL)
-		cur->fdCount++;
+	// if (deadfile == NULL)
+	// 	cur->fdCount++;
 
 	close(newfd); //close will handle all error cases
 	fileobj->dupCount++;

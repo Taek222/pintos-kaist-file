@@ -11,8 +11,6 @@ struct file
 	off_t pos;			 /* Current position. */
 	bool deny_write;	 /* Has file_deny_write() been called? */
 	//project2-extra
-	bool is_stdin;
-	bool is_stdout;
 	int dupCount;
 };
 struct inode;

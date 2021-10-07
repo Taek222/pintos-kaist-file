@@ -16,8 +16,6 @@ file_open(struct inode *inode)
 		file->inode = inode;
 		file->pos = 0;
 		file->deny_write = false;
-		file->is_stdin = false;
-		file->is_stdout = false;
 
 		// Project2-extra
 		file->dupCount = 0;
@@ -53,8 +51,6 @@ file_duplicate(struct file *file)
 			file_deny_write(nfile);
 
 		// Project2-extra
-		nfile->is_stdin = file->is_stdin;
-		nfile->is_stdout = file->is_stdout;
 		nfile->dupCount = file->dupCount;
 	}
 	return nfile;

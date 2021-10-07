@@ -122,9 +122,12 @@ struct thread
 	bool calledExec; // notify 'process_exec' if it was called by syscall exec
 	// 2-4 file descripter
 	struct file **fdTable;
-	int fdCount;
+	int fdCount; // used as both an index of an open spot and a count for the number of open files in fdT
 	// 2-5 deny exec writes
 	struct file *running;
+	// 2-extra
+	int stdin_count;
+	int stdout_count;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; // used to put thread into 'ready_list' or sync blocked_list
