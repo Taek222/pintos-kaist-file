@@ -11,7 +11,7 @@ struct file
 	off_t pos;			 /* Current position. */
 	bool deny_write;	 /* Has file_deny_write() been called? */
 	//project2-extra
-	int dupCount;
+	int dupCount; // how many fds share this file? only really 'close' this file when dupCount == 0
 };
 struct inode;
 

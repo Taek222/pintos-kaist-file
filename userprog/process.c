@@ -1,10 +1,10 @@
-#include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "userprog/process.h"
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
 #include "filesys/directory.h"
@@ -22,7 +22,7 @@
 #include "vm/vm.h"
 #endif
 
-// #define DEBUG
+//#define DEBUG
 //#define DEBUG_WAIT
 
 static void process_cleanup(void);
@@ -30,6 +30,7 @@ static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
 
+// Search current thread's child_list and return child with pid. Return NULL if not found.
 struct thread *get_child_with_pid(int pid)
 {
 	struct thread *cur = thread_current();
@@ -46,13 +47,6 @@ struct thread *get_child_with_pid(int pid)
 			return t;
 	}
 	return NULL;
-}
-
-/* General process initializer for initd and other process. */
-static void
-process_init(void)
-{
-	struct thread *current = thread_current();
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -91,8 +85,6 @@ initd(void *f_name)
 	supplemental_page_table_init(&thread_current()->spt);
 #endif
 
-	process_init();
-
 	if (process_exec(f_name) < 0)
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED();
@@ -104,7 +96,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_)
 {
 	/* Clone current thread to new thread.*/
 	struct thread *cur = thread_current();
-	memcpy(&cur->parent_if, if_, sizeof(struct intr_frame)); // 여기가 잘못됨?
+	memcpy(&cur->parent_if, if_, sizeof(struct intr_frame)); // Pass this intr_frame down to child
 
 	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, cur);
 	if (tid == TID_ERROR)
@@ -140,7 +132,7 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 #ifdef DEBUG
 		//printf("[fork-duplicate] fail at step 1 %llx\n", va);
 #endif
-		return true;
+		return true; // return false ends pml4_for_each, which is undesirable - just return true to pass this kernel va
 	}
 	else
 	{
@@ -194,18 +186,19 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 	}
 
 #ifdef DEBUG
-	// is 'va' correctly mapped to newpage?
+	// TEST) is 'va' correctly mapped to newpage?
 	if (pml4_get_page(current->pml4, va) != newpage)
 		printf("Not mapped!"); // never called
 
 	printf("--Completed copy--\n");
 #endif
+
 	return true;
 }
 #endif
 
 // Project2-extra
-struct Map
+struct MapElem
 {
 	uintptr_t key;
 	uintptr_t value;
@@ -255,16 +248,16 @@ __do_fork(void *aux)
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
 
-	// Failed to duplicate?
+	// multi-oom) Failed to duplicate?
 	if (parent->fdIdx == FDCOUNT_LIMIT)
 		goto error;
 
-	// Project2-extra
+	// Project2-extra) multiple fds sharing same file - use associative map (e.g. dict, hashmap) to duplicate these relationships
+	// other test-cases like multi-oom don't need this feature
 	const int MAPLEN = 10;
-	struct Map map[10];
-	int dupCount = 0;
+	struct MapElem map[10]; // key - parent's struct file * , value - child's newly created struct file *
+	int dupCount = 0;		// index for filling map
 
-	//for (int i = 2; i < parent->fdIdx; i++)
 	for (int i = 0; i < FDCOUNT_LIMIT; i++)
 	{
 		struct file *file = parent->fdTable[i];
@@ -272,6 +265,7 @@ __do_fork(void *aux)
 			continue;
 
 		// Project2-extra) linear search on key-pair array
+		// If 'file' is already duplicated in child, don't duplicate again but share it
 		bool found = false;
 		for (int j = 0; j < MAPLEN; j++)
 		{
@@ -288,7 +282,7 @@ __do_fork(void *aux)
 			if (file > 2)
 				new_file = file_duplicate(file);
 			else
-				new_file = file; // 1 stdin, 2 stdout
+				new_file = file; // 1 STDIN, 2 STDOUT
 
 			current->fdTable[i] = new_file;
 			if (dupCount < MAPLEN)
@@ -300,13 +294,11 @@ __do_fork(void *aux)
 	}
 	current->fdIdx = parent->fdIdx;
 
-	process_init();
-
 #ifdef DEBUG
 	printf("[do_fork] %s Ready to switch!\n", current->name);
 #endif
 
-	// child loaded successfully, wake up parent
+	// child loaded successfully, wake up parent in process_fork
 	sema_up(&current->fork_sema);
 
 	/* Finally, switch to the newly created process. */
@@ -316,8 +308,7 @@ __do_fork(void *aux)
 error:
 	current->exit_status = TID_ERROR;
 	sema_up(&current->fork_sema);
-	exit(TID_ERROR); // #ifdef DEBUG
-					 //thread_exit();
+	exit(TID_ERROR);
 }
 
 /* Switch the current execution context to the f_name.
@@ -358,11 +349,7 @@ int process_exec(void *f_name)
 	/* If load failed, quit. */
 	if (!success)
 	{
-		if (cur->calledExec)
-			free(file_name);
-		else
-			palloc_free_page(file_name);
-
+		palloc_free_page(file_name);
 		return -1;
 	}
 
@@ -375,11 +362,7 @@ int process_exec(void *f_name)
 	//hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true); // #ifdef DEBUG
 	// Q. ptr to number? -> convert to int, uint64_t
 
-	//palloc_free_page(file_name);
-	if (cur->calledExec)
-		free(file_name);
-	else
-		palloc_free_page(file_name);
+	palloc_free_page(file_name);
 
 	/* Start switched process. */
 	do_iret(&_if);
@@ -443,10 +426,9 @@ int process_wait(tid_t child_tid UNUSED)
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
 
-	// busy waiting #ifdef DEBUG
-	// while (1)
-	// {
-	// }
+	// // busy waiting #ifdef DEBUG
+	// for (int i = 0; i < 1000000000; i++)
+	// 	;
 
 	struct thread *cur = thread_current();
 
@@ -474,23 +456,19 @@ int process_wait(tid_t child_tid UNUSED)
 	// Parent waits until child signals (sema_up) after its execution
 	sema_down(&child->wait_sema);
 
-	// for (int i = 0; i < 1000000000; i++)
-	// 	;
-
 	int exit_status = child->exit_status;
 
 #ifdef DEBUG_WAIT
 	printf("[process_wait] Child %d %s : exit status - %d\n", child_tid, child->name, exit_status);
 #endif
 
-	//sema_up(&cur->wait_sema); // #ifdef
-
 	// Q. 자식 프로세스의 프로세스 디스크립터 삭제??
 	// 아마 thread_create에서 palloc 한거 free 하라는 소리인 것 같다
+	// -> do_schedule에서. 너무 일찍하면 exit_status같은거 날라감
 
 	// Keep child page so parent can get exit_status
 	list_remove(&child->child_elem);
-	sema_up(&child->free_sema);
+	sema_up(&child->free_sema); // wake-up child in process_exit - proceed with thread_exit
 	return exit_status;
 }
 
@@ -505,26 +483,21 @@ void process_exit(void)
 	struct thread *cur = thread_current();
 
 	// P2-4 Close all opened files
-	//for (int i = 2; i < cur->fdIdx; i++)
 	for (int i = 0; i < FDCOUNT_LIMIT; i++)
 	{
 		close(i);
 	}
 	//palloc_free_page(cur->fdTable);
-	palloc_free_multiple(cur->fdTable, FDT_PAGES);
-
-	//printf("%s: exit(%d)\n", cur->name, cur->exit_status); //#ifdef DEBUG
+	palloc_free_multiple(cur->fdTable, FDT_PAGES); // multi-oom
 
 	// P2-5 Close current executable run by this process
 	file_close(cur->running);
 
 	process_cleanup();
 
-	// Remove me from my parent's child list
-	//list_remove(&cur->child_elem);
-
 	// Wake up blocked parent
 	sema_up(&cur->wait_sema);
+	// Postpone child termination until parents receives its exit status with 'wait'
 	sema_down(&cur->free_sema);
 }
 

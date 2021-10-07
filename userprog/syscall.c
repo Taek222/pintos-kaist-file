@@ -1,31 +1,29 @@
-#include "userprog/syscall.h"
-#include <stdio.h>
-#include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/loader.h"
-#include "userprog/gdt.h"
+#include "threads/palloc.h"
 #include "threads/flags.h"
-#include "intrinsic.h"
 #include "threads/vaddr.h"
+#include "userprog/gdt.h"
+#include "userprog/process.h"
+#include "userprog/syscall.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
-#include "userprog/process.h"
 #include <list.h>
+#include <stdio.h>
+#include <syscall-nr.h>
+#include "intrinsic.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 
-//int fd_counter = 2; //0,1 is used for stdio
-//struct list files;	//list of open files
+// Project2-4 File descriptor
 static struct file *find_file_by_fd(int fd);
 // Project2-extra
 const int STDIN = 1;
 const int STDOUT = 2;
 
 void check_address(uaddr);
-static int64_t get_user(const uint8_t *uaddr);
-static bool put_user(uint8_t *udst, uint8_t byte);
 void halt(void);
 void exit(int status);
 bool create(const char *file, unsigned initial_size);
@@ -38,6 +36,8 @@ void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
 int dup2(int oldfd, int newfd);
+
+// #define DEBUG
 
 /* System call.
  *
@@ -69,28 +69,10 @@ void syscall_init(void)
 }
 
 /* The main system call interface */
-// #define DEBUG
 void syscall_handler(struct intr_frame *f)
 {
-	// TODO: Your implementation goes here.
-
-	//printf("system call!\n");
-	//printf("syscall : %d\n", f->R.rax);
-
-#ifdef DEBUG
-	// syscall stack frame? (stack base - stack ptr)
-	//hex_dump(f->rsp, f->rsp, f->R.rbp - f->rsp, true); // #ifdef DEBUG
-
-	// write sys-call
-	hex_dump(f->R.rsi, f->R.rsi, f->R.rdx, true); // #ifdef DEBUG
-
-	// print whole user stack (rsp ~)
-	// hex_dump(f->rsp, f->rsp, USER_STACK - f->rsp, true); // #ifdef DEBUG
-	printf("==================\n");
-
-	// print rbp ~
-	//hex_dump(f->R.rbp, f->R.rbp, USER_STACK - f->R.rbp, true); // #ifdef DEBUG
-#endif
+	char *fn_copy;
+	int siz;
 
 	switch (f->R.rax)
 	{
@@ -104,13 +86,6 @@ void syscall_handler(struct intr_frame *f)
 		f->R.rax = fork(f->R.rdi, f);
 		break;
 	case SYS_EXEC:
-		// writable = is_kernel_vaddr(f->R.rdi); //is_writable((uint64_t *)f->R.rdi);
-		// fn_copy = palloc_get_page(0);
-		// if (fn_copy == NULL)
-		// 	exit(-1);
-		// siz = strlen(f->R.rdi);
-		// strlcpy(fn_copy, f->R.rdi, siz); // Kernel panic; fn_copy는 kernel virtual addr라 write가 안되는건가?
-
 		if (exec(f->R.rdi) == -1)
 			exit(-1);
 		break;
@@ -148,7 +123,6 @@ void syscall_handler(struct intr_frame *f)
 		f->R.rax = dup2(f->R.rdi, f->R.rsi);
 		break;
 	default:
-		//thread_exit();
 		exit(-1);
 		break;
 	}
@@ -156,8 +130,10 @@ void syscall_handler(struct intr_frame *f)
 	//thread_exit();
 }
 
-// Check whether the address is under KERN_BASE
-// and the address is mapped properly (prevents page_fault)
+// Check validity of given user virtual address. Exits if any of below conditions is met.
+// 1. Null pointer
+// 2. A pointer to kernel virtual address space (above KERN_BASE)
+// 3. A pointer to unmapped virtual memory (causes page_fault)
 void check_address(const uint64_t *uaddr)
 {
 	struct thread *cur = thread_current();
@@ -167,49 +143,20 @@ void check_address(const uint64_t *uaddr)
 	}
 }
 
-/* Reads a byte at user virtual address UADDR.
- * UADDR must be below KERN_BASE.
- * Returns the byte value if successful, -1 if a segfault
- * occurred. */
-static int64_t
-get_user(const uint8_t *uaddr)
-{
-	int64_t result;
-	__asm __volatile(
-		"movabsq $done_get, %0\n"
-		"movzbq %1, %0\n"
-		"done_get:\n"
-		: "=&a"(result)
-		: "m"(*uaddr));
-	return result;
-}
-
-/* Writes BYTE to user address UDST.
- * UDST must be below KERN_BASE.
- * Returns true if successful, false if a segfault occurred. */
-static bool
-put_user(uint8_t *udst, uint8_t byte)
-{
-	int64_t error_code;
-	__asm __volatile(
-		"movabsq $done_put, %0\n"
-		"movb %b2, %1\n"
-		"done_put:\n"
-		: "=&a"(error_code), "=m"(*udst)
-		: "q"(byte));
-	return error_code != -1;
-}
-
 // Project 2-4. File descriptor
+// Check if given fd is valid, return cur->fdTable[fd]
 static struct file *find_file_by_fd(int fd)
 {
 	struct thread *cur = thread_current();
 
-	if (fd < 0 || fd >= FDCOUNT_LIMIT) // fd >= cur->fdIdx
-		return NULL;				   // error - invalid fd
-	return cur->fdTable[fd];		   // returns NULL if empty
+	// Error - invalid fd
+	if (fd < 0 || fd >= FDCOUNT_LIMIT)
+		return NULL;
+
+	return cur->fdTable[fd]; // automatically returns NULL if empty
 }
 
+// Find open spot in current thread's fdt and put file in it. Returns the fd.
 int add_file_to_fdt(struct file *file)
 {
 	struct thread *cur = thread_current();
@@ -219,6 +166,7 @@ int add_file_to_fdt(struct file *file)
 	while (cur->fdIdx < FDCOUNT_LIMIT && fdt[cur->fdIdx])
 		cur->fdIdx++;
 
+	// Error - fdt full
 	if (cur->fdIdx >= FDCOUNT_LIMIT)
 		return -1;
 
@@ -226,41 +174,52 @@ int add_file_to_fdt(struct file *file)
 	return cur->fdIdx;
 }
 
+// Check for valid fd and do cur->fdTable[fd] = NULL. Returns nothing
 void remove_file_from_fdt(int fd)
 {
 	struct thread *cur = thread_current();
-	if (fd < 0 || fd >= FDCOUNT_LIMIT) // fd >= cur->fdIdx
-		return;						   // error - invalid fd
+
+	// Error - invalid fd
+	if (fd < 0 || fd >= FDCOUNT_LIMIT)
+		return;
 
 	cur->fdTable[fd] = NULL;
 }
 
+// Project 2-2. syscalls
+
+// Terminates Pintos by calling power_off(). No return.
 void halt(void)
 {
 	power_off();
 }
 
+// End current thread, record exit statusNo return.
 void exit(int status)
 {
 	struct thread *cur = thread_current();
 	cur->exit_status = status;
 
-	printf("%s: exit(%d)\n", thread_name(), status); //#ifdef DEBUG
+	printf("%s: exit(%d)\n", thread_name(), status); // Process Termination Message
 	thread_exit();
 }
 
+// Creates a new file called file initially initial_size bytes in size.
+// Returns true if successful, false otherwise
 bool create(const char *file, unsigned initial_size)
 {
 	check_address(file);
 	return filesys_create(file, initial_size);
 }
 
+// Deletes the file called 'file'. Returns true if successful, false otherwise.
 bool remove(const char *file)
 {
 	check_address(file);
 	return filesys_remove(file);
 }
 
+// Opens the file called file, returns fd or -1 (if file could not be opened for some reason)
 int open(const char *file)
 {
 	check_address(file);
@@ -278,6 +237,7 @@ int open(const char *file)
 	return fd;
 }
 
+// Returns the size, in bytes, of the file open as fd.
 int filesize(int fd)
 {
 	struct file *fileobj = find_file_by_fd(fd);
@@ -286,6 +246,8 @@ int filesize(int fd)
 	return file_length(fileobj);
 }
 
+// Reads size bytes from the file open as fd into buffer.
+// Returns the number of bytes actually read (0 at end of file), or -1 if the file could not be read
 int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer);
@@ -301,6 +263,7 @@ int read(int fd, void *buffer, unsigned size)
 		if (cur->stdin_count == 0)
 		{
 			// Not reachable
+			NOT_REACHED();
 			remove_file_from_fdt(fd);
 			ret = -1;
 		}
@@ -332,6 +295,8 @@ int read(int fd, void *buffer, unsigned size)
 	return ret;
 }
 
+// Writes size bytes from buffer to the open file fd.
+// Returns the number of bytes actually written, or -1 if the file could not be written
 int write(int fd, const void *buffer, unsigned size)
 {
 	check_address(buffer);
@@ -347,6 +312,8 @@ int write(int fd, const void *buffer, unsigned size)
 	{
 		if (cur->stdout_count == 0)
 		{
+			// Not reachable
+			NOT_REACHED();
 			remove_file_from_fdt(fd);
 			ret = -1;
 		}
@@ -370,6 +337,8 @@ int write(int fd, const void *buffer, unsigned size)
 	return ret;
 }
 
+// Changes the next byte to be read or written in open file fd to position,
+// expressed in bytes from the beginning of the file (Thus, a position of 0 is the file's start).
 void seek(int fd, unsigned position)
 {
 	struct file *fileobj = find_file_by_fd(fd);
@@ -378,6 +347,7 @@ void seek(int fd, unsigned position)
 	fileobj->pos = position;
 }
 
+// Returns the position of the next byte to be read or written in open file fd, expressed in bytes from the beginning of the file.
 unsigned tell(int fd)
 {
 	struct file *fileobj = find_file_by_fd(fd);
@@ -386,6 +356,7 @@ unsigned tell(int fd)
 	return file_tell(fileobj);
 }
 
+// Closes file descriptor fd. Ignores NULL file. Returns nothing.
 void close(int fd)
 {
 	struct file *fileobj = find_file_by_fd(fd);
@@ -413,91 +384,65 @@ void close(int fd)
 		fileobj->dupCount--;
 }
 
+// Creates 'copy' of oldfd into newfd. If newfd is open, close it. Returns newfd on success, -1 on fail (invalid oldfd)
+// After dup2, oldfd and newfd 'shares' struct file, but closing newfd should not close oldfd (important!)
 int dup2(int oldfd, int newfd)
 {
 	struct file *fileobj = find_file_by_fd(oldfd);
 	if (fileobj == NULL)
 		return -1;
 
-	struct file *deadfile = find_file_by_fd(newfd); //to dup stdio info to existing file
-	// if(deadfile)
-	// 	close(newfd);
-	// oldfd == newfd 인 경우
+	struct file *deadfile = find_file_by_fd(newfd);
 
-	//no 'duplicate' happens really
 	if (oldfd == newfd)
 		return newfd;
 
 	struct thread *cur = thread_current();
 	struct file **fdt = cur->fdTable;
 
+	// Don't literally copy, but just increase its count and share the same struct file
+	// [syscall close] Only close it when count == 0
+
 	// Copy stdin or stdout to another fd
-	if (oldfd == 0 || fileobj == STDIN) // stdin itself or copied fd
-	{
-		close(newfd);
-
-		fdt[newfd] = 1;
-		//cur->fdIdx++;
-
+	if (fileobj == STDIN)
 		cur->stdin_count++;
-		return newfd;
-	}
-	if (oldfd == 1 || fileobj == STDOUT) // stdout itself or copied fd
-	{
-		close(newfd);
-
-		fdt[newfd] = 2;
-		//cur->fdIdx++;
-
+	else if (fileobj == STDOUT)
 		cur->stdout_count++;
-		return newfd;
-	}
+	else
+		fileobj->dupCount++;
 
-	// test case does not open new files after dup2 so don't care about modifying add/remove functions
-
-	// if (deadfile == NULL)
-	// 	cur->fdIdx++;
-
-	close(newfd); //close will handle all error cases
-	fileobj->dupCount++;
+	close(newfd);
 	fdt[newfd] = fileobj;
 	return newfd;
 }
 
+// (parent) Returns pid of child on success or -1 on fail
+// (child) Returns 0
 tid_t fork(const char *thread_name, struct intr_frame *f)
 {
 	return process_fork(thread_name, f);
 }
 
+// Run new 'executable' from current process
+// Don't confuse with open! 'open' just opens up any file (txt, executable), 'exec' runs only executable
+// Never returns on success. Returns -1 on fail.
 int exec(char *file_name)
 {
 	struct thread *cur = thread_current();
 	check_address(file_name);
 
-	// #ifdef DEBUG
-	// SYS_EXEC - process_exec의 process_cleanup 때문에 f->R.rdi 날아감.
-	// 여기서 동적할당해서 복사한 뒤, 그걸 넘겨주기?
-
-	// // bool writable;
-	// // writable = is_kernel_vaddr(f->R.rdi); //is_writable((uint64_t *)f->R.rdi);
-
+	// 문제점) SYS_EXEC - process_exec의 process_cleanup 때문에 f->R.rdi 날아감.
+	// 여기서 file_name 동적할당해서 복사한 뒤, 그걸 넘겨주기
 	int siz = strlen(file_name) + 1;
-	char *fn_copy = malloc(siz); // #ifdef DEBUG palloc 쓰면 fault?
+	char *fn_copy = palloc_get_page(PAL_ZERO);
 	if (fn_copy == NULL)
 		exit(-1);
-	strlcpy(fn_copy, file_name, siz); // Kernel panic; fn_copy는 kernel virtual addr라 write가 안되는건가?
+	strlcpy(fn_copy, file_name, siz);
 
-	//printf("[exec] calling process_exec with CLI : %s\n", file_name);
-	cur->calledExec = true;
 	if (process_exec(fn_copy) == -1)
 		return -1;
 
-	// int child_pid = process_create_initd(file_name);
-	// if (child_pid == TID_ERROR)
-	// 	return -1;
-	// struct thread *child = get_child_with_pid(child_pid);
-
-	// sema_down(&child->load_sema);
-
+	// Not reachable
+	NOT_REACHED();
 	return 0;
 }

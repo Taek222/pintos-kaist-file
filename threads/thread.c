@@ -498,7 +498,6 @@ init_thread(struct thread *t, const char *name, int priority)
 	sema_init(&t->wait_sema, 0);
 	sema_init(&t->fork_sema, 0);
 	sema_init(&t->free_sema, 0);
-	t->calledExec = false;
 
 	// 2-5
 	t->running = NULL;
