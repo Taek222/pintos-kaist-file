@@ -288,6 +288,8 @@ int read(int fd, void *buffer, unsigned size)
 	else
 	{
 		// Q. read는 동시접근 허용해도 되지 않을까?
+		// > 아마 write와의 mutual_exclusion 위해서 같은 rw_lock 쓰는 듯
+		// readers-writer problem 참고
 		lock_acquire(&file_rw_lock);
 		ret = file_read(fileobj, buffer, size);
 		lock_release(&file_rw_lock);

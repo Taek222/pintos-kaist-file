@@ -170,12 +170,7 @@ void thread_exit(void) NO_RETURN;
 void thread_yield(void);
 
 int thread_get_priority(void);
-void thread_set_priority(int);
-
-int thread_get_nice(void);
-void thread_set_nice(int);
-int thread_get_recent_cpu(void);
-int thread_get_load_avg(void);
+void thread_set_priority(int); // P1-2
 
 void do_iret(struct intr_frame *tf);
 
@@ -199,6 +194,10 @@ void update_load_avg();
 void total_update_priority();
 void thread_update_priority(struct thread *t);
 int load_avg;
+int thread_get_nice(void);
+void thread_set_nice(int);
+int thread_get_recent_cpu(void);
+int thread_get_load_avg(void);
 
 // 2-4 syscall - fork
 #define FDT_PAGES 3						  // pages to allocate for file descriptor tables (thread_create, process_exit)

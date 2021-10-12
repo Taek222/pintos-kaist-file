@@ -350,8 +350,7 @@ void thread_yield(void)
 	intr_set_level(old_level);
 }
 
-/* Sets the current thread's priority to NEW_PRIORITY. */
-// 1-2
+// P1-2) Sets the current thread's priority to NEW_PRIORITY.
 void thread_set_priority(int new_priority)
 {
 	// 1-4
