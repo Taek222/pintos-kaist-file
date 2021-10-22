@@ -46,6 +46,8 @@ struct page {
 	struct frame *frame;   /* Back reference for frame */
 
 	/* Your implementation */
+	// Project 3 - Supplemental Page Table
+	struct hash_elem hash_elem; /* Hash table element for SPT */
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -85,6 +87,8 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
+    struct hash spt_hash;
+	// 22Oct21 Design - key : page->va, value : struct page
 };
 
 #include "threads/thread.h"

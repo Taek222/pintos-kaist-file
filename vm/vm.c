@@ -76,9 +76,16 @@ err:
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
-	/* TODO: Fill this function. */
 
-	return page;
+	/* TODO: Fill this function. */
+	struct page dummy_page; dummy_page.va = va; // dummy for hashing
+	struct hash_elem *e;
+	e = hash_find(&spt->spt_hash, &dummy_page.hash_elem);
+
+	if(e == NULL)
+		return NULL;
+	
+	return page = hash_entry(e, struct page, hash_elem);
 }
 
 /* Insert PAGE into spt with validation. */
@@ -88,7 +95,16 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 	int succ = false;
 	/* TODO: Fill this function. */
 
-	return succ;
+	// checks that the virtual address does not exist in the given supplemental page table.
+	// Q. 그래서 만약 이미 SPT에 page 있으면 넣지 마? 아니면 replace해?
+	// > succ 있는거 보니까, 이미 있으면 넣지 말고 false return 하는 것 같음
+	struct hash_elem *e = hash_find(&spt->spt_hash, &page->hash_elem);
+	if(e != NULL) // page already in SPT
+		return succ; // false, fail
+
+	// page not in SPT
+	hash_insert (&spt->spt_hash, &page->hash_elem);	
+	return succ = true;
 }
 
 void
@@ -123,7 +139,28 @@ vm_evict_frame (void) {
 static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
+
 	/* TODO: Fill this function. */
+	void * kva = palloc_get_page(PAL_USER);
+	if (kva == NULL){
+		// Todo... eviction
+		/*
+		Frame eviction은 어떻게 이루어질까?
+		> frame 얻기 위한 palloc 실패 시 
+		→ Replacement policy에 따라 frame table에서 가장 안 쓰이는 frame 하나 집어서, 기존 page와의 연결 끊고 새로운 page 연결
+
+		연결 끊긴 기존 page는 swap table에 저장 (swapped-out)
+		
+		struct frame은 한 번 만들면, page만 갈아끼우는 방식으로 재사용될 것 같음
+		그니까, 한번 할당한 frame kernel kva를 free 하는건 아닌 것 같음.
+
+		Q. swapped-out page에 파일의 어느 위치까지 읽었는지 offset같은거 저장해야 하지 않을까?
+		> struct file_page 같은데에 새로운 member 만들어야 할 듯?
+
+		-- 확실하진 않지만 일단 디자인이 이럼 --
+		*/
+	}
+	frame->kva = kva;
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -164,7 +201,15 @@ vm_dealloc_page (struct page *page) {
 bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
+
 	/* TODO: Fill this function */
+	// 22Oct21 - va (user vaddr?) 에 해당하는 struct page 가져와서 vm_do_claim_page 호출
+
+	ASSERT(is_user_vaddr(va)) // 체크용
+	struct thread *cur = thread_current();
+	void * kvaddr = pml4_get_page(cur->pml4, va);
+
+	// search SPT for page correspoinding to kvaddr??
 
 	return vm_do_claim_page (page);
 }
@@ -179,13 +224,35 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	// page와 frame에 저장된 실제 physical memory 주소 (kernel vaddr) 관계를 page table에 등록
+	struct thread *cur = thread_current();
+
+	bool writable = is_writable(frame->kva);
+	pml4_set_page(cur->pml4, page, frame->kva, writable)
+	// add the mapping from the virtual address to the physical address in the page table.
 
 	return swap_in (page, frame->kva);
 }
 
 /* Initialize new supplemental page table */
+// Docs - Hash Table 코드 참고
+unsigned page_hash (const struct hash_elem *p_, void *aux UNUSED) {
+  const struct page *p = hash_entry (p_, struct page, hash_elem);
+  return hash_bytes (&p->va, sizeof p->va);
+}
+
+bool page_less (const struct hash_elem *a_,
+           		const struct hash_elem *b_, void *aux UNUSED) {
+  const struct page *a = hash_entry (a_, struct page, hash_elem);
+  const struct page *b = hash_entry (b_, struct page, hash_elem);
+
+  return a->va < b->va;
+}
+
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	struct thread *cur = thread_current();
+	hash_init (&cur->spt, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
