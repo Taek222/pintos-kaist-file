@@ -877,7 +877,7 @@ struct lazy_load_info{
 	struct file *file;
 	size_t page_read_bytes;
 	size_t page_zero_bytes;
-}
+};
 
 static bool
 lazy_load_segment(struct page *page, void *aux)

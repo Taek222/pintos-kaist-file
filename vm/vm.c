@@ -53,18 +53,22 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
-		vm_do_claim_page(upage)
+		vm_do_claim_page(upage); // #ifdef DBG - false일때 처리?
+
+		bool (*initializer)(struct page *, enum vm_type, void *);
 		switch(type){
-			case VM_UNINIT:
-				bool (*initializer)(struct page *, enum vm_type, void *) = uninit_initializer;
-				break;
+			// # ifdef DEBUG 
+			// case VM_UNINIT:
+			// 	initializer = uninit_initialize;
+			// 	break;
 			case VM_ANON:
-				bool (*initializer)(struct page *, enum vm_type, void *) = anon_initializer;
+				initializer = anon_initializer;
 				break;
 			case VM_FILE:
-				bool (*initializer)(struct page *, enum vm_type, void *) = file_initializer;
+				initializer = file_backed_initializer;
 		}
-		uninit_new (upage, upage->va, init, type, aux, initializer);
+		uninit_new (upage, ((struct page*)upage)->va, init, type, aux, initializer);
+
 		/* TODO: Insert the page into the spt. */
 		spt_insert_page(spt, upage);
 	}
@@ -227,8 +231,8 @@ vm_do_claim_page (struct page *page) {
 	// page와 frame에 저장된 실제 physical memory 주소 (kernel vaddr) 관계를 page table에 등록
 	struct thread *cur = thread_current();
 
-	bool writable = is_writable(frame->kva);
-	pml4_set_page(cur->pml4, page, frame->kva, writable)
+	bool writable = is_writable((uint64_t *)frame->kva);
+	pml4_set_page(cur->pml4, page, frame->kva, writable);
 	// add the mapping from the virtual address to the physical address in the page table.
 
 	return swap_in (page, frame->kva);
