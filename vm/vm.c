@@ -53,7 +53,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
-		vm_do_claim_page(upage); // #ifdef DBG - false일때 처리?
 
 		bool (*initializer)(struct page *, enum vm_type, void *);
 		switch(type){
@@ -67,10 +66,16 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			case VM_FILE:
 				initializer = file_backed_initializer;
 		}
-		uninit_new (upage, ((struct page*)upage)->va, init, type, aux, initializer);
+		
+		struct page *new_page = malloc(sizeof(struct page));
+		// new_page->va = upage;
+		// vm_do_claim_page(new_page); // #ifdef DBG - false일때 처리?
+		uninit_new (new_page, upage, init, type, aux, initializer);
+
 
 		/* TODO: Insert the page into the spt. */
-		spt_insert_page(spt, upage);
+		spt_insert_page(spt, new_page); // should always return true - checked that upage is not in spt
+		return true;
 	}
 err:
 	return false;
@@ -142,8 +147,6 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
-
 	/* TODO: Fill this function. */
 	void * kva = palloc_get_page(PAL_USER);
 	if (kva == NULL){
@@ -164,10 +167,13 @@ vm_get_frame (void) {
 		-- 확실하진 않지만 일단 디자인이 이럼 --
 		*/
 	}
+
+	struct frame *frame = malloc(sizeof(struct frame)); // #ifdef DEBUG - what if this fails?
 	frame->kva = kva;
+	// frame->page = malloc(sizeof(struct page));
 
 	ASSERT (frame != NULL);
-	ASSERT (frame->page == NULL);
+	// ASSERT (frame->page == NULL); // #ifdef DEBUG
 	return frame;
 }
 
@@ -189,6 +195,9 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+
+	struct thread* t = thread_current();
+	printf("-- My name : %s--\n", t->name);
 
 	return vm_do_claim_page (page);
 }
@@ -232,7 +241,7 @@ vm_do_claim_page (struct page *page) {
 	struct thread *cur = thread_current();
 
 	bool writable = is_writable((uint64_t *)frame->kva);
-	pml4_set_page(cur->pml4, page, frame->kva, writable);
+	pml4_set_page(cur->pml4, page->va, frame->kva, writable);
 	// add the mapping from the virtual address to the physical address in the page table.
 
 	return swap_in (page, frame->kva);
