@@ -877,6 +877,7 @@ struct lazy_load_info{
 	struct file *file;
 	size_t page_read_bytes;
 	size_t page_zero_bytes;
+	off_t offset;
 };
 
 static bool
@@ -889,12 +890,18 @@ lazy_load_segment(struct page *page, void *aux)
 	struct file * file = lazy_load_info->file;
 	size_t page_read_bytes = lazy_load_info->page_read_bytes;
 	size_t page_zero_bytes = lazy_load_info->page_zero_bytes;
-	if (file_read(file, page, page_read_bytes) != (int)page_read_bytes)
+	off_t offset = lazy_load_info->offset;
+
+	file_seek(file, offset);
+
+	ASSERT (page->frame != NULL);
+	void * kva = page->frame->kva;
+	if (file_read(file, kva, page_read_bytes) != (int)page_read_bytes)
 	{
-		palloc_free_page(page);
+		//palloc_free_page(page); // #ifdef DBG Q. 여기서 free해주는거 맞아?
 		return false;
 	}
-	memset(page + page_read_bytes, 0, page_zero_bytes);
+	memset(kva + page_read_bytes, 0, page_zero_bytes);
 	return true;
 }
 
@@ -933,6 +940,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		lazy_load_info->file = file;
 		lazy_load_info->page_read_bytes = page_read_bytes;
 		lazy_load_info->page_zero_bytes = page_zero_bytes;
+		lazy_load_info->offset = ofs;
 		void *aux = lazy_load_info;
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, aux))
