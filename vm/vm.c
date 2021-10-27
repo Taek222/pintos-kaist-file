@@ -65,6 +65,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 				break;
 			case VM_FILE:
 				initializer = file_backed_initializer;
+				break;
 		}
 		
 		struct page *new_page = malloc(sizeof(struct page));
@@ -195,7 +196,8 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-
+	struct page *fpage = spt_find_page(spt, addr);
+	//how to validate fault from this information?
 	struct thread* t = thread_current();
 	printf("-- My name : %s--\n", t->name);
 

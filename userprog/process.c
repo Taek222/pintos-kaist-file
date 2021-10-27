@@ -894,7 +894,8 @@ lazy_load_segment(struct page *page, void *aux)
 
 	file_seek(file, offset);
 
-	ASSERT (page->frame != NULL);
+	vm_do_claim_page(page);
+	ASSERT (page->frame != NULL); 	//이 상황에서 page->frame이 제대로 설정돼있는가?
 	void * kva = page->frame->kva;
 	if (file_read(file, kva, page_read_bytes) != (int)page_read_bytes)
 	{
@@ -965,7 +966,15 @@ setup_stack(struct intr_frame *if_)
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-
+	struct page *kpage;
+	bool success = false;
+	// Map the stack on stack_bottom?
+	success = vm_do_claim_page(kpage);
+	if (success)
+		if_->rsp = USER_STACK; //setting rsp
+		kpage->operations.type = VM_MARKER_0; //mark the page 
+	else
+		palloc_free_page(kpage);
 	return success;
 }
 #endif /* VM */
