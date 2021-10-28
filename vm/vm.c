@@ -60,7 +60,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			// case VM_UNINIT:
 			// 	initializer = uninit_initialize;
 			// 	break;
-			case VM_ANON:
+			case VM_ANON: case VM_ANON|VM_MARKER_0:
 				initializer = anon_initializer;
 				break;
 			case VM_FILE:
