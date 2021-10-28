@@ -894,7 +894,7 @@ lazy_load_segment(struct page *page, void *aux)
 
 	file_seek(file, offset);
 
-	vm_do_claim_page(page);
+	//vm_do_claim_page(page);
 	ASSERT (page->frame != NULL); 	//이 상황에서 page->frame이 제대로 설정돼있는가?
 	void * kva = page->frame->kva;
 	if (file_read(file, kva, page_read_bytes) != (int)page_read_bytes)
@@ -966,15 +966,25 @@ setup_stack(struct intr_frame *if_)
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-	struct page *kpage;
-	bool success = false;
-	// Map the stack on stack_bottom?
-	success = vm_do_claim_page(kpage);
-	if (success)
+
+	// No need to load lazily
+
+	// Q. anon page로 init? - 어떻게 하지
+	// 바로 anon page 만드는게 아니라, vm_alloc_page 호출해서 unint page 만든 후, 바로 vm_claim_page해서 frame 할당 해주기
+	
+	vm_alloc_page(VM_ANON, stack_bottom, true); //
+	success = vm_claim_page(stack_bottom); // find page corresponding to user vaddr 'stack_bottom' and get frame mapped
+	if (success){
 		if_->rsp = USER_STACK; //setting rsp
-		kpage->operations.type = VM_MARKER_0; //mark the page 
-	else
-		palloc_free_page(kpage);
+
+		struct supplemental_page_table *spt = &thread_current ()->spt;
+		struct page * stack_bottom_page = spt_find_page (spt, stack_bottom);
+		//stack_bottom_page->operations->type = VM_MARKER_0; //mark the page as stack
+	}
+	else{
+		printf("Failed on setup_stack\n");
+	}
+
 	return success;
 }
 #endif /* VM */

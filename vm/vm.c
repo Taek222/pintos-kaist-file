@@ -196,8 +196,12 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+
+	// 27Oct21 - Introduction - Handling page fault 참고
+	// 1. Locate the page that faulted in the supplemental page table
 	struct page *fpage = spt_find_page(spt, addr);
 	//how to validate fault from this information?
+
 	struct thread* t = thread_current();
 	printf("-- My name : %s--\n", t->name);
 
@@ -213,19 +217,25 @@ vm_dealloc_page (struct page *page) {
 }
 
 /* Claim the page that allocate on VA. */
+// Prerequisite : struct page assigned to va and saved on the SPT
 bool
 vm_claim_page (void *va UNUSED) {
-	struct page *page = NULL;
 
 	/* TODO: Fill this function */
 	// 22Oct21 - va (user vaddr?) 에 해당하는 struct page 가져와서 vm_do_claim_page 호출
 
 	ASSERT(is_user_vaddr(va)) // 체크용
-	struct thread *cur = thread_current();
-	void * kvaddr = pml4_get_page(cur->pml4, va);
+	// struct thread *cur = thread_current();
+	// void * kvaddr = pml4_get_page(cur->pml4, va);
 
-	// search SPT for page correspoinding to kvaddr??
-
+	// search SPT for page correspoinding to va
+	struct supplemental_page_table *spt = &thread_current ()->spt;
+	struct page * page = spt_find_page (spt, va);
+	if (page == NULL){
+		// #ifdef DEBUG
+		// page corresponding to va doesn't exist!
+		return false;
+	}
 	return vm_do_claim_page (page);
 }
 

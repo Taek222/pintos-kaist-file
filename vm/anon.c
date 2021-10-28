@@ -4,7 +4,9 @@
 #include "devices/disk.h"
 
 /* DO NOT MODIFY BELOW LINE */
-static struct disk *swap_disk;
+static struct disk *swap_disk; // #ifdef DBG Q. 이게 뭐임?
+// swap disk의 swap slot = disk_read, disk_write에서 sec_no로 구분하는 것 같은데
+
 static bool anon_swap_in (struct page *page, void *kva);
 static bool anon_swap_out (struct page *page);
 static void anon_destroy (struct page *page);
