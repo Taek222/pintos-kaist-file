@@ -212,13 +212,6 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 
-
-#ifdef DBG
-	// print va's of pages saved in SPT
-	hash_apply(&spt->spt_hash, hash_action_func_print);
-	printf("\n");
-#endif
-
 	// 27Oct21 - Introduction - Handling page fault 참고
 	// Step 1. Locate the page that faulted in the supplemental page table
 	void * fpage_uvaddr = (uint64_t)addr - ((uint64_t)addr%PGSIZE); // round down to nearest PGSIZE
@@ -226,16 +219,31 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	
 	// Invalid access - Not in SPT / kernel vaddr / write request to read-only page
 	if(fpage == NULL || is_kernel_vaddr(addr) || (write && !fpage->writable)){
+		#ifdef DBG
+		printf("Invalid access on vm_try_handle_fault - %p\n", addr);
+		#endif
+
 		return false;
 	}
 	//how to validate fault from this information?
 
-	struct thread* t = thread_current();
-	printf("-- My name : %s--\n", t->name);
+#ifdef DBG
+	printf("-- Fault on page with va %p --\n", fpage->va);
 
+	// print va's of pages saved in SPT
+	printf("Current hash : \n");
+	hash_apply(&spt->spt_hash, hash_action_func_print);
+	printf("\n");
+#endif
 
 	// Step 2~4.
 	bool gotFrame = vm_do_claim_page (fpage);
+
+	#ifdef DBG
+	if (gotFrame) printf("!! got frame mapped on %p !!\n\n", fpage->va);
+	else printf("XX frame map fail on %p XX\n\n", fpage->va);
+	#endif
+
 	return gotFrame;
 }
 

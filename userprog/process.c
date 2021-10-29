@@ -901,9 +901,12 @@ lazy_load_segment(struct page *page, void *aux)
 	if (file_read(file, kva, page_read_bytes) != (int)page_read_bytes)
 	{
 		//palloc_free_page(page); // #ifdef DBG Q. 여기서 free해주는거 맞아?
+		free(lazy_load_info);
 		return false;
 	}
+
 	memset(kva + page_read_bytes, 0, page_zero_bytes);
+	free(lazy_load_info);
 	return true;
 }
 
@@ -938,7 +941,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		struct lazy_load_info *lazy_load_info;
+		struct lazy_load_info *lazy_load_info = malloc(sizeof(struct lazy_load_info));
 		lazy_load_info->file = file;
 		lazy_load_info->page_read_bytes = page_read_bytes;
 		lazy_load_info->page_zero_bytes = page_zero_bytes;
@@ -981,11 +984,11 @@ setup_stack(struct intr_frame *if_)
 		#ifdef DEBUG_VM
 		struct supplemental_page_table *spt = &thread_current ()->spt;
 		struct page * stack_bottom_page = spt_find_page (spt, stack_bottom);
-		printf("First stack page - %p\n", stack_bottom_page->va);
+		printf("First stack page - %p\n\n", stack_bottom_page->va);
 		#endif
 	}
 	else{
-		printf("Failed on setup_stack\n");
+		printf("Failed on setup_stack\n\n");
 	}
 
 	return success;
