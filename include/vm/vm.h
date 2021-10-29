@@ -52,6 +52,9 @@ struct page {
 	/* Your implementation */
 	// Project 3 - Supplemental Page Table
 	struct hash_elem hash_elem; /* Hash table element for SPT */
+	// 29Oct21 - Writable 
+	bool writable; // 'vm_try_handler' needs to find out if the page is writable or read-only
+
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */

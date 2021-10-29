@@ -4,6 +4,15 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
+
+#define DBG
+#ifdef DBG
+void hash_action_func_print (struct hash_elem *e, void *aux){
+	struct page *page = hash_entry(e, struct page, hash_elem);
+	printf("%p - ", page->va);
+}
+#endif
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -73,9 +82,15 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		// vm_do_claim_page(new_page); // #ifdef DBG - false일때 처리?
 		uninit_new (new_page, upage, init, type, aux, initializer);
 
+		new_page->writable = writable;
 
 		/* TODO: Insert the page into the spt. */
 		spt_insert_page(spt, new_page); // should always return true - checked that upage is not in spt
+
+	#ifdef DBG
+		printf("Inserted new page into SPT - va : %p / writable : %d\n", new_page->va, writable);
+	#endif
+
 		return true;
 	}
 err:
@@ -197,15 +212,31 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 
+
+#ifdef DBG
+	// print va's of pages saved in SPT
+	hash_apply(&spt->spt_hash, hash_action_func_print);
+	printf("\n");
+#endif
+
 	// 27Oct21 - Introduction - Handling page fault 참고
-	// 1. Locate the page that faulted in the supplemental page table
-	struct page *fpage = spt_find_page(spt, addr);
+	// Step 1. Locate the page that faulted in the supplemental page table
+	void * fpage_uvaddr = (uint64_t)addr - ((uint64_t)addr%PGSIZE); // round down to nearest PGSIZE
+	struct page *fpage = spt_find_page(spt, fpage_uvaddr);
+	
+	// Invalid access - Not in SPT / kernel vaddr / write request to read-only page
+	if(fpage == NULL || is_kernel_vaddr(addr) || (write && !fpage->writable)){
+		return false;
+	}
 	//how to validate fault from this information?
 
 	struct thread* t = thread_current();
 	printf("-- My name : %s--\n", t->name);
 
-	return vm_do_claim_page (page);
+
+	// Step 2~4.
+	bool gotFrame = vm_do_claim_page (fpage);
+	return gotFrame;
 }
 
 /* Free the page.
@@ -252,7 +283,9 @@ vm_do_claim_page (struct page *page) {
 	// page와 frame에 저장된 실제 physical memory 주소 (kernel vaddr) 관계를 page table에 등록
 	struct thread *cur = thread_current();
 
-	bool writable = is_writable((uint64_t *)frame->kva);
+	// bool writable = is_writable((uint64_t *)frame->kva); // #ifdef DBG
+	bool writable = page->writable;
+
 	pml4_set_page(cur->pml4, page->va, frame->kva, writable);
 	// add the mapping from the virtual address to the physical address in the page table.
 
@@ -276,8 +309,7 @@ bool page_less (const struct hash_elem *a_,
 
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	struct thread *cur = thread_current();
-	hash_init (&cur->spt, page_hash, page_less, NULL);
+	hash_init (&spt->spt_hash, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */

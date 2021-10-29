@@ -24,6 +24,7 @@
 
 //#define DEBUG
 //#define DEBUG_WAIT
+#define DEBUG_VM
 
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
@@ -977,8 +978,11 @@ setup_stack(struct intr_frame *if_)
 	if (success){
 		if_->rsp = USER_STACK; //setting rsp
 
+		#ifdef DEBUG_VM
 		struct supplemental_page_table *spt = &thread_current ()->spt;
 		struct page * stack_bottom_page = spt_find_page (spt, stack_bottom);
+		printf("First stack page - %p\n", stack_bottom_page->va);
+		#endif
 	}
 	else{
 		printf("Failed on setup_stack\n");
