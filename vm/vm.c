@@ -5,7 +5,7 @@
 #include "vm/inspect.h"
 
 
-#define DBG
+//#define DBG
 #ifdef DBG
 void hash_action_func_print (struct hash_elem *e, void *aux){
 	struct page *page = hash_entry(e, struct page, hash_elem);
@@ -103,7 +103,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 
 	/* TODO: Fill this function. */
-	struct page dummy_page; dummy_page.va = va; // dummy for hashing
+	struct page dummy_page; dummy_page.va = pg_round_down(va); // dummy for hashing
 	struct hash_elem *e;
 	e = hash_find(&spt->spt_hash, &dummy_page.hash_elem);
 
@@ -214,7 +214,9 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 
 	// 27Oct21 - Introduction - Handling page fault 참고
 	// Step 1. Locate the page that faulted in the supplemental page table
-	void * fpage_uvaddr = (uint64_t)addr - ((uint64_t)addr%PGSIZE); // round down to nearest PGSIZE
+	void * fpage_uvaddr = pg_round_down(addr); // round down to nearest PGSIZE
+	// void * fpage_uvaddr = (uint64_t)addr - ((uint64_t)addr%PGSIZE); // round down to nearest PGSIZE
+
 	struct page *fpage = spt_find_page(spt, fpage_uvaddr);
 	
 	// Invalid access - Not in SPT / kernel vaddr / write request to read-only page
@@ -225,6 +227,11 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 
 		return false;
 	}
+	// else if (fpage == NULL){
+	// 	// user reading 0x0 - just allocate new one 
+	// 	vm_alloc_page(VM_ANON, fpage_uvaddr, true); // #ifdef DBG
+	// 	fpage = spt_find_page(spt, fpage_uvaddr);
+	// }
 	//how to validate fault from this information?
 
 #ifdef DBG
