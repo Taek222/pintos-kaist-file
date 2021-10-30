@@ -133,11 +133,12 @@ void syscall_handler(struct intr_frame *f)
 // Check validity of given user virtual address. Exits if any of below conditions is met.
 // 1. Null pointer
 // 2. A pointer to kernel virtual address space (above KERN_BASE)
-// 3. A pointer to unmapped virtual memory (causes page_fault)
+// 3. A pointer to unmapped virtual memory (causes page_fault) -> In Project 3, page fault causes demand paging
 void check_address(const uint64_t *uaddr)
 {
 	struct thread *cur = thread_current();
-	if (uaddr == NULL || !(is_user_vaddr(uaddr)) || pml4_get_page(cur->pml4, uaddr) == NULL)
+	//if (uaddr == NULL || !(is_user_vaddr(uaddr)) || pml4_get_page(cur->pml4, uaddr) == NULL)
+	if (uaddr == NULL || !(is_user_vaddr(uaddr)))
 	{
 		exit(-1);
 	}
