@@ -37,7 +37,7 @@ unsigned tell(int fd);
 void close(int fd);
 int dup2(int oldfd, int newfd);
 
-// #define DEBUG
+//#define DEBUG
 
 /* System call.
  *
@@ -73,6 +73,10 @@ void syscall_handler(struct intr_frame *f)
 {
 	char *fn_copy;
 	int siz;
+
+	// Project 3-2 stack growth - in case page fault occurs in the kernel; save user rsp
+	struct thread *t = thread_current();
+	t->rsp = f->rsp;
 
 	switch (f->R.rax)
 	{
@@ -142,6 +146,12 @@ void check_address(const uint64_t *uaddr)
 	{
 		exit(-1);
 	}
+	#ifdef DEBUG
+	else if(pml4_get_page(cur->pml4, uaddr) == NULL)
+	{
+		printf("Check address fault at - %p\n", uaddr);
+	}
+	#endif
 }
 
 // Project 2-4. File descriptor

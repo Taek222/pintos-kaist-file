@@ -24,7 +24,7 @@
 
 //#define DEBUG
 //#define DEBUG_WAIT
-//#define DEBUG_VM
+// #define DEBUG_VM
 
 static void process_cleanup(bool);
 static bool load(const char *file_name, struct intr_frame *if_);
