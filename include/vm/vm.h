@@ -120,4 +120,12 @@ void vm_dealloc_page (struct page *page);
 bool vm_claim_page (void *va);
 enum vm_type page_get_type (struct page *page);
 
+// Project 3 - Copy SPT
+struct lazy_load_info{
+	struct file *file;
+	size_t page_read_bytes;
+	size_t page_zero_bytes;
+	off_t offset;
+};
+
 #endif  /* VM_VM_H */

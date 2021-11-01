@@ -26,7 +26,7 @@
 //#define DEBUG_WAIT
 //#define DEBUG_VM
 
-static void process_cleanup(void);
+static void process_cleanup(bool);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
@@ -329,7 +329,7 @@ int process_exec(void *f_name)
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
-	process_cleanup();
+	process_cleanup(false); // clear SPT, not destroy
 
 	// Project 2-1. Pass args - parse
 	char *argv[30]; // Q. 테스트는 일단 통과, 사이즈 30이면 충분하겠지? 동적할당 안해도 되겠지?
@@ -494,7 +494,7 @@ void process_exit(void)
 	// P2-5 Close current executable run by this process
 	file_close(cur->running);
 
-	process_cleanup();
+	process_cleanup(true); // destroy SPT
 
 	// Wake up blocked parent
 	sema_up(&cur->wait_sema);
@@ -504,12 +504,15 @@ void process_exit(void)
 
 /* Free the current process's resources. */
 static void
-process_cleanup(void)
+process_cleanup(bool destroySPT)
 {
 	struct thread *curr = thread_current();
 
 #ifdef VM
-	supplemental_page_table_kill(&curr->spt);
+	if (destroySPT)
+		supplemental_page_table_kill(&curr->spt);
+	else
+		supplemental_page_table_clear(&curr->spt); // save SPT for later (process_exec)
 #endif
 
 	uint64_t *pml4;
@@ -873,14 +876,6 @@ install_page(void *upage, void *kpage, bool writable)
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
-
-struct lazy_load_info{
-	struct file *file;
-	size_t page_read_bytes;
-	size_t page_zero_bytes;
-	off_t offset;
-};
-
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {

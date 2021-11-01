@@ -6,6 +6,8 @@
 
 
 //#define DBG
+//#define DBG_SPT_COPY
+
 #ifdef DBG
 void hash_action_func_print (struct hash_elem *e, void *aux){
 	struct page *page = hash_entry(e, struct page, hash_elem);
@@ -322,6 +324,55 @@ bool page_less (const struct hash_elem *a_,
   return a->va < b->va;
 }
 
+void hash_action_copy (struct hash_elem *e, void *hash_aux){
+	struct thread *t = thread_current();
+	ASSERT(&t->spt == (struct supplemental_page_table *)hash_aux); // child's SPT
+
+	struct page *page = hash_entry(e, struct page, hash_elem);
+	enum vm_type type = page->operations->type; // type of page to copy
+
+	if(type == VM_UNINIT){
+		struct uninit_page *uninit = &page->uninit;
+		vm_initializer *init = uninit->init;
+		void *aux = uninit->aux;
+	
+		// copy aux (struct lazy_load_info *)
+		struct lazy_load_info *lazy_load_info = malloc(sizeof(struct lazy_load_info));
+		if(lazy_load_info == NULL){
+			// #ifdef DBG
+			// kernel pool all used
+		}
+		memcpy(lazy_load_info, (struct lazy_load_info *)aux, sizeof(struct lazy_load_info));
+
+	#ifdef DBG_SPT_COPY
+		printf("copy - offset %d\n", lazy_load_info->offset);
+	#endif
+
+		lazy_load_info->file = file_reopen(((struct lazy_load_info *)aux)->file); // get new struct file (calloc)
+		vm_alloc_page_with_initializer(uninit->type, page->va, page->writable, init, lazy_load_info);
+	}
+	if(type & VM_ANON == VM_ANON){ // include stack pages
+		//when __do_fork is called, thread_current is the child thread so we can just use vm_alloc_page
+		vm_alloc_page(type, page->va, page->writable);
+
+
+		struct page *newpage = spt_find_page(&t->spt, page->va); // copied page
+		vm_do_claim_page(newpage);
+
+		ASSERT(page->frame != NULL);
+		memcpy(newpage->frame->kva, page->frame->kva, PGSIZE);
+	}
+	// #ifdef DBG TODO
+	// file page -> duplicate file?
+	// don't understand file page yet
+}
+void hash_action_destroy (struct hash_elem *e, void *aux){
+	struct page *page = hash_entry(e, struct page, hash_elem);
+	destroy(page);
+	free(page->frame);
+	free(page);
+}
+
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	hash_init (&spt->spt_hash, page_hash, page_less, NULL);
@@ -331,6 +382,9 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+	src->spt_hash.aux = dst; // pass 'dst' as aux to 'hash_apply'
+	hash_apply(&src->spt_hash, hash_action_copy);
+	return true;
 }
 
 /* Free the resource hold by the supplemental page table */
@@ -338,4 +392,11 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	hash_destroy(&spt->spt_hash, hash_action_destroy);
+}
+
+// Used in process_exec - process_cleanup : don't destroy SPT when it will be used afterwards!
+void
+supplemental_page_table_clear (struct supplemental_page_table *spt UNUSED) {
+	hash_clear(&spt->spt_hash, hash_action_destroy);
 }
