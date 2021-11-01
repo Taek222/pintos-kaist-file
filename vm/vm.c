@@ -198,6 +198,8 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	vm_alloc_page(VM_ANON | VM_MARKER_0, addr, true); // Create uninit page for stack; will become anon page
+	//bool success = vm_claim_page(addr);
 }
 
 /* Handle the fault on write_protected page */
@@ -221,20 +223,41 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 
 	struct page *fpage = spt_find_page(spt, fpage_uvaddr);
 	
-	// Invalid access - Not in SPT / kernel vaddr / write request to read-only page
-	if(fpage == NULL || is_kernel_vaddr(addr) || (write && !fpage->writable)){
+	// Invalid access - Not in SPT (stack growth or abort) / kernel vaddr / write request to read-only page
+	if(is_kernel_vaddr(addr)){
 		#ifdef DBG
-		printf("Invalid access on vm_try_handle_fault - %p\n", addr);
+		printf("Accessing kernel vaddr on vm_try_handle_fault - %p\n", addr);
 		#endif
 
 		return false;
 	}
-	// else if (fpage == NULL){
-	// 	// user reading 0x0 - just allocate new one 
-	// 	vm_alloc_page(VM_ANON, fpage_uvaddr, true); // #ifdef DBG
-	// 	fpage = spt_find_page(spt, fpage_uvaddr);
-	// }
-	//how to validate fault from this information?
+	else if (fpage == NULL){
+		void *rsp = user ? f->rsp : thread_current()->rsp; // a page fault occurs in the kernel
+		const int GROWTH_LIMIT = 32; // heuristic
+		const int STACK_LIMIT = USER_STACK - (1<<20); // 1MB size limit on stack
+
+		// Check stack size max limit and stack growth request heuristically
+		if((uint64_t)addr > STACK_LIMIT && USER_STACK > (uint64_t)addr && (uint64_t)addr > (uint64_t)rsp - GROWTH_LIMIT){
+			vm_stack_growth (fpage_uvaddr);
+			fpage = spt_find_page(spt, fpage_uvaddr);
+		}
+		else{
+			#ifdef DBG
+			printf("Access beyond stack growth limiton vm_try_handle_fault\n", addr);
+			printf("rsp %p, fault addr %p, diff %d\n", rsp, addr, (uint64_t)rsp-(uint64_t)addr);
+			#endif
+			return false;
+		}
+	}
+	else if(write && !fpage->writable){
+		#ifdef DBG
+		printf("write request to read-only page on vm_try_handle_fault - %p\n", addr);
+		#endif
+
+		return false;
+	}
+
+	ASSERT(fpage != NULL);
 
 #ifdef DBG
 	printf("-- Fault on page with va %p --\n", fpage->va);

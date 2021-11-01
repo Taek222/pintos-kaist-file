@@ -142,6 +142,10 @@ page_fault(struct intr_frame *f)
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
+	// // Project 3-2 stack growth - a page fault occurs in the kernel
+	// // kernel mode일때 page fault 난거면 rsp 바꿔주기?
+	// if(!user) f->rsp = thread_current()->rsp;
+
 	/* [Project2] Support code for Preventing leak */
 	//f->rip = f->R.rax;
 	//f->R.rax = -1;
