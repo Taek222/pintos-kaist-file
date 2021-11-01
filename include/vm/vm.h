@@ -3,6 +3,10 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 
+#include <hash.h>
+#include "threads/mmu.h"
+#include "threads/vaddr.h"
+
 enum vm_type {
 	/* page not initialized */
 	VM_UNINIT = 0,
@@ -46,6 +50,11 @@ struct page {
 	struct frame *frame;   /* Back reference for frame */
 
 	/* Your implementation */
+	// Project 3 - Supplemental Page Table
+	struct hash_elem hash_elem; /* Hash table element for SPT */
+	// 29Oct21 - Writable 
+	bool writable; // 'vm_try_handler' needs to find out if the page is writable or read-only
+
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -85,6 +94,8 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
+    struct hash spt_hash;
+	// 22Oct21 Design - key : page->va, value : struct page
 };
 
 #include "threads/thread.h"
@@ -108,5 +119,13 @@ bool vm_alloc_page_with_initializer (enum vm_type type, void *upage,
 void vm_dealloc_page (struct page *page);
 bool vm_claim_page (void *va);
 enum vm_type page_get_type (struct page *page);
+
+// Project 3 - Copy SPT
+struct lazy_load_info{
+	struct file *file;
+	size_t page_read_bytes;
+	size_t page_zero_bytes;
+	off_t offset;
+};
 
 #endif  /* VM_VM_H */

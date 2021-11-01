@@ -24,8 +24,9 @@
 
 //#define DEBUG
 //#define DEBUG_WAIT
+//#define DEBUG_VM
 
-static void process_cleanup(void);
+static void process_cleanup(bool);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
@@ -328,7 +329,7 @@ int process_exec(void *f_name)
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
-	process_cleanup();
+	process_cleanup(false); // clear SPT, not destroy
 
 	// Project 2-1. Pass args - parse
 	char *argv[30]; // Q. 테스트는 일단 통과, 사이즈 30이면 충분하겠지? 동적할당 안해도 되겠지?
@@ -359,7 +360,7 @@ int process_exec(void *f_name)
 	_if.R.rdi = argc;
 	_if.R.rsi = (uint64_t)*rspp + sizeof(void *);
 
-	//hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true); // #ifdef DEBUG
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true); // #ifdef DEBUG
 	// Q. ptr to number? -> convert to int, uint64_t
 
 	palloc_free_page(file_name);
@@ -493,7 +494,7 @@ void process_exit(void)
 	// P2-5 Close current executable run by this process
 	file_close(cur->running);
 
-	process_cleanup();
+	process_cleanup(true); // destroy SPT
 
 	// Wake up blocked parent
 	sema_up(&cur->wait_sema);
@@ -503,12 +504,15 @@ void process_exit(void)
 
 /* Free the current process's resources. */
 static void
-process_cleanup(void)
+process_cleanup(bool destroySPT)
 {
 	struct thread *curr = thread_current();
 
 #ifdef VM
-	supplemental_page_table_kill(&curr->spt);
+	if (destroySPT)
+		supplemental_page_table_kill(&curr->spt);
+	else
+		supplemental_page_table_clear(&curr->spt); // save SPT for later (process_exec)
 #endif
 
 	uint64_t *pml4;
@@ -872,13 +876,33 @@ install_page(void *upage, void *kpage, bool writable)
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
-
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	struct lazy_load_info * lazy_load_info = (struct lazy_load_info *)aux;
+	struct file * file = lazy_load_info->file;
+	size_t page_read_bytes = lazy_load_info->page_read_bytes;
+	size_t page_zero_bytes = lazy_load_info->page_zero_bytes;
+	off_t offset = lazy_load_info->offset;
+
+	file_seek(file, offset);
+
+	//vm_do_claim_page(page);
+	ASSERT (page->frame != NULL); 	//이 상황에서 page->frame이 제대로 설정돼있는가?
+	void * kva = page->frame->kva;
+	if (file_read(file, kva, page_read_bytes) != (int)page_read_bytes)
+	{
+		//palloc_free_page(page); // #ifdef DBG Q. 여기서 free해주는거 맞아?
+		free(lazy_load_info);
+		return false;
+	}
+
+	memset(kva + page_read_bytes, 0, page_zero_bytes);
+	free(lazy_load_info);
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -903,6 +927,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
 
+	// file_seek(file, ofs); // we change 'ofs' instead
 	while (read_bytes > 0 || zero_bytes > 0)
 	{
 		/* Do calculate how to fill this page.
@@ -912,7 +937,12 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		struct lazy_load_info *lazy_load_info = malloc(sizeof(struct lazy_load_info));
+		lazy_load_info->file = file;
+		lazy_load_info->page_read_bytes = page_read_bytes;
+		lazy_load_info->page_zero_bytes = page_zero_bytes;
+		lazy_load_info->offset = ofs;
+		void *aux = lazy_load_info;
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, aux))
 			return false;
@@ -920,6 +950,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
+		ofs += page_read_bytes;
 		upage += PGSIZE;
 	}
 	return true;
@@ -936,6 +967,26 @@ setup_stack(struct intr_frame *if_)
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
+
+	// No need to load lazily
+
+	// Q. anon page로 init? - 어떻게 하지
+	// 바로 anon page 만드는게 아니라, vm_alloc_page 호출해서 unint page 만든 후, 바로 vm_claim_page해서 frame 할당 해주기
+	
+	vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true); // Create uninit page for stack; will become anon page
+	success = vm_claim_page(stack_bottom); // find page corresponding to user vaddr 'stack_bottom' and get frame mapped
+	if (success){
+		if_->rsp = USER_STACK; //setting rsp
+
+		#ifdef DEBUG_VM
+		struct supplemental_page_table *spt = &thread_current ()->spt;
+		struct page * stack_bottom_page = spt_find_page (spt, stack_bottom);
+		printf("First stack page - %p\n\n", stack_bottom_page->va);
+		#endif
+	}
+	else{
+		printf("Failed on setup_stack\n\n");
+	}
 
 	return success;
 }
