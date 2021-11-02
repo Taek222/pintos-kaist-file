@@ -52,9 +52,8 @@ struct page {
 	/* Your implementation */
 	// Project 3 - Supplemental Page Table
 	struct hash_elem hash_elem; /* Hash table element for SPT */
-	// 29Oct21 - Writable 
 	bool writable; // 'vm_try_handler' needs to find out if the page is writable or read-only
-
+	int page_cnt; // only for file-mapped pages
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -127,5 +126,8 @@ struct lazy_load_info{
 	size_t page_zero_bytes;
 	off_t offset;
 };
+
+// spt_remove_page without deleting the page from SPT
+void remove_page(struct page *page);
 
 #endif  /* VM_VM_H */

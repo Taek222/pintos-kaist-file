@@ -15,6 +15,16 @@ void hash_action_func_print (struct hash_elem *e, void *aux){
 }
 #endif
 
+// spt_remove_page without deleting the page from SPT
+void remove_page(struct page *page){
+	struct thread *t = thread_current();
+	pml4_clear_page(t->pml4, page->va);
+	destroy(page); // uninit destroy - free aux
+	if(page->frame)
+		free(page->frame);
+	free(page);
+}
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -85,6 +95,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		uninit_new (new_page, upage, init, type, aux, initializer);
 
 		new_page->writable = writable;
+		new_page->page_cnt = -1; // only for file-mapped pages
 
 		/* TODO: Insert the page into the spt. */
 		spt_insert_page(spt, new_page); // should always return true - checked that upage is not in spt
@@ -136,7 +147,10 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	pml4_clear_page(thread_current()->pml4, page->va);
+	hash_delete(&spt->spt_hash, &page->hash_elem);
 	vm_dealloc_page (page);
+
 	return true;
 }
 
@@ -284,6 +298,8 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 void
 vm_dealloc_page (struct page *page) {
 	destroy (page);
+	if(page->frame)
+		free(page->frame);
 	free (page);
 }
 
@@ -391,9 +407,10 @@ void hash_action_copy (struct hash_elem *e, void *hash_aux){
 }
 void hash_action_destroy (struct hash_elem *e, void *aux){
 	struct page *page = hash_entry(e, struct page, hash_elem);
-	destroy(page);
-	free(page->frame);
-	free(page);
+	// destroy(page);
+	// free(page->frame);
+	// free(page);
+	remove_page(page);
 }
 
 void

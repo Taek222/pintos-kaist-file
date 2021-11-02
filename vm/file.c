@@ -22,10 +22,18 @@ vm_file_init (void) {
 /* Initialize the file backed page */
 bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
+	struct uninit_page *uninit = &page->uninit;
+	// vm_initializer *init = uninit->init;
+	void *aux = uninit->aux;
+
 	/* Set up the handler */
 	page->operations = &file_ops;
 
+	struct lazy_load_info *info = (struct lazy_load_info *)aux;
 	struct file_page *file_page = &page->file;
+	file_page->file = info->file;
+	file_page->length = info->page_read_bytes;
+	file_page->offset = info->offset;
 }
 
 /* Swap in the page by read contents from the file. */
@@ -47,7 +55,8 @@ file_backed_destroy (struct page *page) {
 }
 
 // used in lazy allocation - from process.c
-// 나중에 struct file_page에 vm_initializer *init 같은거 만들어서 uninit의 init 함수 (lazy_load_segment) 넘겨주는 식으로 리팩토링
+// 나중에 struct file_page에 vm_initializer *init 같은거 만들어서 uninit의 init 함수 (lazy_load_segment) 넘겨주는 식으로 리팩토링 
+// -> X uninit page 만드는거야
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
@@ -89,6 +98,8 @@ do_mmap (void *addr, size_t length, int writable,
 
 	void *start_addr = addr; // return value or in case of fail - free from this addr
 	struct thread *t = thread_current();
+	struct page *page;
+	int page_cnt = 1; // How many consecutive pages are mapped with file?
 
 	// file_seek(file, offset); // change offset itself
 	
@@ -100,10 +111,14 @@ do_mmap (void *addr, size_t length, int writable,
 			void *free_addr = start_addr; // get page from this user vaddr and destroy them
 			while(free_addr < addr){
 				// free allocated uninit page
-				struct page *page = spt_find_page(&t->spt, free_addr);
-				destroy(page); // uninit destroy - free aux
-				free(page->frame);
-				free(page);
+				page = spt_find_page(&t->spt, free_addr);
+
+				// destroy(page); // uninit destroy - free aux
+				// free(page->frame);
+				// free(page);
+				// remove_page(page);
+				spt_remove_page(&t->spt, page);
+
 
 				free_addr += PGSIZE;
 			}
@@ -123,9 +138,14 @@ do_mmap (void *addr, size_t length, int writable,
 		if (!vm_alloc_page_with_initializer(VM_FILE, addr,
 											writable, lazy_load_segment, aux))
 
+		// record page_cnt
+		page = spt_find_page(&t->spt, addr);
+		page->page_cnt = page_cnt;
+
 		offset += page_read_bytes;
 		length -= page_read_bytes;
 		addr += PGSIZE;
+		page_cnt++;
 	}while(length > PGSIZE);
 
 	return start_addr;
@@ -134,4 +154,34 @@ do_mmap (void *addr, size_t length, int writable,
 /* Do the munmap */
 void
 do_munmap (void *addr) {
+	struct thread *t = thread_current();
+	struct page *page;
+
+	page = spt_find_page(&t->spt, addr);
+	int prev_cnt = 0;
+
+	while(page != NULL && page->operations->type == VM_FILE && page->page_cnt == prev_cnt + 1){
+		if(pml4_is_dirty(t->pml4, addr)){
+			struct file *file = page->file.file;
+			size_t length = page->file.length;
+			off_t offset = page->file.offset;
+
+			if(file_write_at(file, addr, length, offset) != length){
+				// #ifdef DBG
+				// TODO - Not properly written-back
+			}
+		}	
+
+		// removed from the process's list of virtual pages.
+		// pml4_clear_page(thread_current()->pml4, page->va);
+		// destroy(page);
+		// free(page->frame);
+		// free(page);
+		//remove_page(page);
+		spt_remove_page(&t->spt, page);
+
+		prev_cnt = page->page_cnt;
+		addr += PGSIZE;
+		page = spt_find_page(&t->spt, addr);
+	}
 }
