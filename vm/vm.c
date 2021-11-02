@@ -37,6 +37,7 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	list_init(&frame_table);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -159,7 +160,7 @@ static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
-
+	victim = list_entry(list_pop_front(&frame_table), struct frame, elem); // FIFO algorithm
 	return victim;
 }
 
@@ -167,10 +168,11 @@ vm_get_victim (void) {
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
-	struct frame *victim UNUSED = vm_get_victim ();
+	struct frame *victim = vm_get_victim();
 	/* TODO: swap out the victim and return the evicted frame. */
-
-	return NULL;
+	swap_out(victim->page);
+	// Manipulate swap table according to its design
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -181,6 +183,7 @@ static struct frame *
 vm_get_frame (void) {
 	/* TODO: Fill this function. */
 	void * kva = palloc_get_page(PAL_USER);
+	struct frame *frame = NULL;
 	if (kva == NULL){
 		// Todo... eviction
 		/*
@@ -198,12 +201,14 @@ vm_get_frame (void) {
 
 		-- 확실하진 않지만 일단 디자인이 이럼 --
 		*/
+		frame = vm_evict_frame();
 	}
-
-	struct frame *frame = malloc(sizeof(struct frame)); // #ifdef DEBUG - what if this fails?
-	frame->kva = kva;
+	else{
+		frame = malloc(sizeof(struct frame)); // #ifdef DEBUG - what if this fails?
+		frame->kva = kva;
+	}
 	// frame->page = malloc(sizeof(struct page));
-
+	list_push_back(&frame_table, &frame->elem);
 	ASSERT (frame != NULL);
 	// ASSERT (frame->page == NULL); // #ifdef DEBUG
 	return frame;

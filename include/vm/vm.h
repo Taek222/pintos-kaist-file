@@ -6,6 +6,7 @@
 #include <hash.h>
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
+#include <list.h>
 
 enum vm_type {
 	/* page not initialized */
@@ -71,7 +72,10 @@ struct page {
 struct frame {
 	void *kva;
 	struct page *page;
+	struct list_elem elem; // Project 3 - frame table list element
 };
+
+struct list frame_table; // Project 3 - frame table
 
 /* The function table for page operations.
  * This is one way of implementing "interface" in C.
