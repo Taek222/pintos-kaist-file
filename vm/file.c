@@ -62,7 +62,7 @@ file_backed_destroy (struct page *page) {
 // 나중에 struct file_page에 vm_initializer *init 같은거 만들어서 uninit의 init 함수 (lazy_load_segment) 넘겨주는 식으로 리팩토링 
 // -> X uninit page 만드는거야
 static bool
-lazy_load_segment(struct page *page, void *aux)
+lazy_load_segment_for_file(struct page *page, void *aux)
 {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
@@ -87,6 +87,9 @@ lazy_load_segment(struct page *page, void *aux)
 
 	memset(kva + page_read_bytes, 0, page_zero_bytes);
 	free(lazy_load_info);
+
+	file_seek(file, offset); // may read the file later - reset fileobj pos
+
 	return true;
 }
 
@@ -146,7 +149,7 @@ do_mmap (void *addr, size_t length, int writable,
 		lazy_load_info->offset = offset;
 		void *aux = lazy_load_info;
 		if (!vm_alloc_page_with_initializer(VM_FILE, addr,
-											writable, lazy_load_segment, aux))
+											writable, lazy_load_segment_for_file, aux))
 			return NULL;
 
 		// record page_cnt
@@ -184,6 +187,8 @@ do_munmap (void *addr) {
 			}
 		}	
 
+		prev_cnt = page->page_cnt;
+
 		// removed from the process's list of virtual pages.
 		// pml4_clear_page(thread_current()->pml4, page->va);
 		// destroy(page);
@@ -192,7 +197,6 @@ do_munmap (void *addr) {
 		//remove_page(page);
 		spt_remove_page(&t->spt, page);
 
-		prev_cnt = page->page_cnt;
 		addr += PGSIZE;
 		page = spt_find_page(&t->spt, addr);
 	}
