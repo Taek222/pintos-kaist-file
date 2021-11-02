@@ -2,6 +2,8 @@
 
 #include "vm/vm.h"
 
+//#define DBG
+
 static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
 static void file_backed_destroy (struct page *page);
@@ -28,6 +30,8 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 
 	/* Set up the handler */
 	page->operations = &file_ops;
+
+	memset(uninit, 0, sizeof(struct uninit_page));
 
 	struct lazy_load_info *info = (struct lazy_load_info *)aux;
 	struct file_page *file_page = &page->file;
@@ -101,11 +105,13 @@ do_mmap (void *addr, size_t length, int writable,
 	struct page *page;
 	int page_cnt = 1; // How many consecutive pages are mapped with file?
 
+	size_t flen = file_length(file) - offset; // file left for reading
+
 	// file_seek(file, offset); // change offset itself
 	
 	// allocate at least one page
 	// throw off data that sticks out 
-	do{
+	while(length > 0){
 		// Fail : pages mapped overlaps other existing pages
 		if(spt_find_page(&t->spt, addr) != NULL){
 			void *free_addr = start_addr; // get page from this user vaddr and destroy them
@@ -125,8 +131,12 @@ do_mmap (void *addr, size_t length, int writable,
 			return NULL;
 		}
 
-		size_t page_read_bytes = length < PGSIZE ? length : PGSIZE;
+		size_t page_read_bytes = MIN(length, flen) < PGSIZE ? MIN(length, flen) : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+		#ifdef DBG
+		printf("(do_mmap) File length %d - read length %d\n", file_length(file), length);
+		#endif
 
 		// file info to load onto memory once fault occurs
 		struct lazy_load_info *lazy_load_info = malloc(sizeof(struct lazy_load_info));
@@ -137,16 +147,18 @@ do_mmap (void *addr, size_t length, int writable,
 		void *aux = lazy_load_info;
 		if (!vm_alloc_page_with_initializer(VM_FILE, addr,
 											writable, lazy_load_segment, aux))
+			return NULL;
 
 		// record page_cnt
 		page = spt_find_page(&t->spt, addr);
 		page->page_cnt = page_cnt;
 
 		offset += page_read_bytes;
-		length -= page_read_bytes;
+		flen -= page_read_bytes;
+		length -= PGSIZE;
 		addr += PGSIZE;
 		page_cnt++;
-	}while(length > PGSIZE);
+	}
 
 	return start_addr;
 }
