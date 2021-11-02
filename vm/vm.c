@@ -15,7 +15,7 @@ void hash_action_func_print (struct hash_elem *e, void *aux){
 }
 #endif
 
-// spt_remove_page without deleting the page from SPT
+// spt_remove_page without deleting the page from SPT hash
 void remove_page(struct page *page){
 	struct thread *t = thread_current();
 	pml4_clear_page(t->pml4, page->va);
@@ -260,7 +260,9 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 			printf("Access beyond stack growth limiton vm_try_handle_fault\n", addr);
 			printf("rsp %p, fault addr %p, diff %d\n", rsp, addr, (uint64_t)rsp-(uint64_t)addr);
 			#endif
-			return false;
+
+			exit(-1); // mmap-unmap
+			//return false;
 		}
 	}
 	else if(write && !fpage->writable){
@@ -268,7 +270,8 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		printf("write request to read-only page on vm_try_handle_fault - %p\n", addr);
 		#endif
 
-		return false;
+		exit(-1); // mmap-ro
+		// return false;
 	}
 
 	ASSERT(fpage != NULL);
@@ -379,7 +382,7 @@ void hash_action_copy (struct hash_elem *e, void *hash_aux){
 		struct lazy_load_info *lazy_load_info = malloc(sizeof(struct lazy_load_info));
 		if(lazy_load_info == NULL){
 			// #ifdef DBG
-			// kernel pool all used
+			// malloc fail - kernel pool all used
 		}
 		memcpy(lazy_load_info, (struct lazy_load_info *)aux, sizeof(struct lazy_load_info));
 
@@ -389,24 +392,57 @@ void hash_action_copy (struct hash_elem *e, void *hash_aux){
 
 		lazy_load_info->file = file_reopen(((struct lazy_load_info *)aux)->file); // get new struct file (calloc)
 		vm_alloc_page_with_initializer(uninit->type, page->va, page->writable, init, lazy_load_info);
+		
+		// uninit page created by mmap - record page_cnt
+		if(uninit->type == VM_FILE){
+			struct page *newpage = spt_find_page(&t->spt, page->va);
+			newpage->page_cnt = page->page_cnt;
+		}
 	}
-	if(type & VM_ANON == VM_ANON){ // include stack pages
+	if(type & VM_ANON == VM_ANON || type == VM_FILE){ // include stack pages
 		//when __do_fork is called, thread_current is the child thread so we can just use vm_alloc_page
 		vm_alloc_page(type, page->va, page->writable);
-
 
 		struct page *newpage = spt_find_page(&t->spt, page->va); // copied page
 		vm_do_claim_page(newpage);
 
+		if(type == VM_FILE){
+			newpage->page_cnt = page->page_cnt;
+
+			struct file_page *file_page = &newpage->file;
+			file_page->file = file_duplicate(page->file.file); // duplicate, not just assign
+			file_page->length = page->file.length;
+			file_page->offset = page->file.offset;
+		}
+
 		ASSERT(page->frame != NULL);
 		memcpy(newpage->frame->kva, page->frame->kva, PGSIZE);
 	}
-	// #ifdef DBG TODO
-	// file page -> duplicate file?
-	// don't understand file page yet
+	if(type == VM_FILE){
+
+	}
 }
 void hash_action_destroy (struct hash_elem *e, void *aux){
+	struct thread *t = thread_current();
 	struct page *page = hash_entry(e, struct page, hash_elem);
+	
+	// mmap-exit - process exits without calling munmap; unmap here
+	if(page->operations->type == VM_FILE){
+		if(pml4_is_dirty(t->pml4, page->va)){
+			struct file *file = page->file.file;
+			size_t length = page->file.length;
+			off_t offset = page->file.offset;
+
+			ASSERT(page->frame != NULL);
+
+			if(file_write_at(file, page->frame->kva, length, offset) != length){
+				// #ifdef DBG
+				// TODO - Not properly written-back
+			}
+		}
+	}
+
+
 	// destroy(page);
 	// free(page->frame);
 	// free(page);

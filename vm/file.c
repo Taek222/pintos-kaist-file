@@ -143,7 +143,7 @@ do_mmap (void *addr, size_t length, int writable,
 
 		// file info to load onto memory once fault occurs
 		struct lazy_load_info *lazy_load_info = malloc(sizeof(struct lazy_load_info));
-		lazy_load_info->file = file;
+		lazy_load_info->file = file_reopen(file); // mmap-close - closing file after mmap
 		lazy_load_info->page_read_bytes = page_read_bytes;
 		lazy_load_info->page_zero_bytes = page_zero_bytes;
 		lazy_load_info->offset = offset;
@@ -158,7 +158,7 @@ do_mmap (void *addr, size_t length, int writable,
 
 		offset += page_read_bytes;
 		flen -= page_read_bytes;
-		length -= PGSIZE;
+		length -= length < PGSIZE ? length : PGSIZE; // prevent unsigned underflow
 		addr += PGSIZE;
 		page_cnt++;
 	}
@@ -175,7 +175,11 @@ do_munmap (void *addr) {
 	page = spt_find_page(&t->spt, addr);
 	int prev_cnt = 0;
 
-	while(page != NULL && page->operations->type == VM_FILE && page->page_cnt == prev_cnt + 1){
+	// Check if the page is file_page or uninit_page to be transmuted into file_page and then its consecutive
+	while(page != NULL 
+		&& (page->operations->type == VM_FILE 
+			|| (page->operations->type == VM_UNINIT && page->uninit.type == VM_FILE))
+		&& page->page_cnt == prev_cnt + 1){
 		if(pml4_is_dirty(t->pml4, addr)){
 			struct file *file = page->file.file;
 			size_t length = page->file.length;
