@@ -483,6 +483,8 @@ void process_exit(void)
 
 	struct thread *cur = thread_current();
 
+	//process_cleanup(true); // destroy SPT - mmap-exit (child-mm-wrt) : SPT must be alive before file closes
+
 	// P2-4 Close all opened files
 	for (int i = 0; i < FDCOUNT_LIMIT; i++)
 	{
@@ -902,6 +904,9 @@ lazy_load_segment(struct page *page, void *aux)
 
 	memset(kva + page_read_bytes, 0, page_zero_bytes);
 	free(lazy_load_info);
+
+	file_seek(file, offset); // may read the file later - reset fileobj pos
+	
 	return true;
 }
 
