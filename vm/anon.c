@@ -3,7 +3,9 @@
 #include "vm/vm.h"
 #include "devices/disk.h"
 
-#define DBG
+// #define DBG
+#define DBG_swap
+
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk; // #ifdef DBG Q. 이게 뭐임?
@@ -48,6 +50,7 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 
 	struct anon_page *anon_page = &page->anon;
 	anon_page->swap_sec = -1;
+	return true;
 }
 
 /* Swap in the page by read contents from the swap disk. */
@@ -58,9 +61,19 @@ anon_swap_in (struct page *page, void *kva) {
 	int swap_sec = anon_page->swap_sec;
 	int swap_slot_idx = swap_sec / SECTORS_IN_PAGE;
 
-	if(bitmap_test(swap_disk, swap_slot_idx) == 0)
-		return false;
-		//PANIC("(anon swap in) Frame not stored in the swap slot!\n");
+// #ifdef DBG_swap
+// 	printf("(anon_swap_in) swap sec %d, swap_slot_idx %d\n", swap_sec, swap_slot_idx);
+// #endif
+
+	if(bitmap_test(swap_table, swap_slot_idx) == 0)
+		//return false;
+		PANIC("(anon swap in) Frame not stored in the swap slot!\n");
+
+// #ifdef DBG_swap
+// 	printf("(anon_swap_in) page %p - frame %p - new kva %p\n", page->va, page->frame->kva, kva);
+// #endif
+	page->frame->kva = kva;
+
 	bitmap_set(swap_disk, swap_slot_idx, 0);
 
 	// ASSERT(is_writable(kva) != false);
@@ -88,7 +101,11 @@ anon_swap_out (struct page *page) {
 
 	if(free_idx == BITMAP_ERROR)
 		PANIC("(anon swap-out) No more free swap slots!\n");
-	
+
+#ifdef DBG_swap
+	printf("(anon_swap_out) page %p - frame %p\n", page->va, page->frame->kva);
+#endif
+
 	int swap_sec = free_idx * SECTORS_IN_PAGE;
 
 	// disk_write is done per sector; repeat until one page is written
@@ -99,6 +116,11 @@ anon_swap_out (struct page *page) {
 	pml4_clear_page(thread_current()->pml4, page->va);
 
 	anon_page->swap_sec = swap_sec;
+
+	// Not really needed - New link created in 'vm_do_claim_page'
+	page->frame->page = NULL;
+	page->frame = NULL;
+
 	return true;
 }
 

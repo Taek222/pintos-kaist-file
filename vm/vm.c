@@ -7,6 +7,8 @@
 
 //#define DBG
 //#define DBG_SPT_COPY
+//#define DBG_swap
+
 
 #ifdef DBG
 void hash_action_func_print (struct hash_elem *e, void *aux){
@@ -19,10 +21,11 @@ void hash_action_func_print (struct hash_elem *e, void *aux){
 void remove_page(struct page *page){
 	struct thread *t = thread_current();
 	pml4_clear_page(t->pml4, page->va);
-	destroy(page); // uninit destroy - free aux
 	if(page->frame)
 		free(page->frame);
-	free(page);
+	vm_dealloc_page (page);
+	// destroy(page); // uninit destroy - free aux
+	// free(page);
 }
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -150,6 +153,9 @@ void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	pml4_clear_page(thread_current()->pml4, page->va);
 	hash_delete(&spt->spt_hash, &page->hash_elem);
+	
+	if(page->frame)
+		free(page->frame);
 	vm_dealloc_page (page);
 
 	return true;
@@ -202,13 +208,18 @@ vm_get_frame (void) {
 		-- 확실하진 않지만 일단 디자인이 이럼 --
 		*/
 		frame = vm_evict_frame();
+
+	#ifdef DBG_swap
+		printf("(vm_get_frame) palloc fail - got frame kva %p\n", frame->kva);
+	#endif 
 	}
 	else{
 		frame = malloc(sizeof(struct frame)); // #ifdef DEBUG - what if this fails?
 		frame->kva = kva;
 	}
 	// frame->page = malloc(sizeof(struct page));
-	list_push_back(&frame_table, &frame->elem);
+	// list_push_back(&frame_table, &frame->elem); // BUG - physical memory overlap; lazy_load_info offset and before->prev->next
+
 	ASSERT (frame != NULL);
 	// ASSERT (frame->page == NULL); // #ifdef DEBUG
 	return frame;
@@ -298,6 +309,13 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	else printf("XX frame map fail on %p XX\n\n", fpage->va);
 	#endif
 
+	if (gotFrame)
+		list_push_back(&frame_table, &fpage->frame->elem);
+	#ifdef DBG_swap
+	else
+		printf("Fault at %p\n", page->va);
+	#endif
+
 	return gotFrame;
 }
 
@@ -306,8 +324,8 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 void
 vm_dealloc_page (struct page *page) {
 	destroy (page);
-	if(page->frame)
-		free(page->frame);
+	// if(page->frame)
+	// 	free(page->frame);
 	free (page);
 }
 
@@ -353,7 +371,14 @@ vm_do_claim_page (struct page *page) {
 	pml4_set_page(cur->pml4, page->va, frame->kva, writable);
 	// add the mapping from the virtual address to the physical address in the page table.
 
-	return swap_in (page, frame->kva);
+	bool res = swap_in (page, frame->kva);
+
+	#ifdef DBG_swap
+	if(!res)
+		printf("(vm_do_claim_page) Fail at va %p, kva %p\n", page->va, page->frame->kva); // not reached?
+	#endif
+
+	return res;
 }
 
 /* Initialize new supplemental page table */
@@ -479,5 +504,6 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 // Used in process_exec - process_cleanup : don't destroy SPT when it will be used afterwards!
 void
 supplemental_page_table_clear (struct supplemental_page_table *spt UNUSED) {
-	hash_clear(&spt->spt_hash, hash_action_destroy);
+	//hash_clear(&spt->spt_hash, hash_action_destroy); // exec-once
+	hash_clear(&spt->spt_hash, NULL);
 }

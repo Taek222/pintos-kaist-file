@@ -11,6 +11,8 @@
 #include "vm/vm.h"
 #include "vm/uninit.h"
 
+#define DBG
+
 static bool uninit_initialize (struct page *page, void *kva);
 static void uninit_destroy (struct page *page);
 
@@ -50,6 +52,10 @@ uninit_initialize (struct page *page, void *kva) {
 	/* Fetch first, page_initialize may overwrite the values */
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
+
+#ifdef DBG
+	struct lazy_load_info *test = (struct lazy_load_info *)aux;
+#endif 
 
 	/* TODO: You may need to fix this function. */
 	return uninit->page_initializer (page, uninit->type, kva) &&
