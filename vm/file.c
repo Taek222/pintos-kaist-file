@@ -46,6 +46,9 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
 	struct file_page *file_page = &page->file;
+
+	ASSERT(page->frame->kva == kva); // #ifdef DBG check
+
 	void *addr = page->va;
 	//struct thread *t = thread_current();
 
@@ -58,7 +61,7 @@ file_backed_swap_in (struct page *page, void *kva) {
 	size_t length = file_page->length;
 	off_t offset = file_page->offset;
 
-	if(file_read_at(file, addr, length, offset) != length){
+	if(file_read_at(file, kva, length, offset) != length){
 		// #ifdef DBG
 		// TODO - Not properly written-back
 	}
@@ -104,6 +107,8 @@ file_backed_swap_out (struct page *page) {
 static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+
+	close(file_page->file);
 }
 
 // used in lazy allocation - from process.c
