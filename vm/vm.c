@@ -7,7 +7,7 @@
 
 //#define DBG
 //#define DBG_SPT_COPY
-//#define DBG_swap
+#define DBG_swap
 
 
 #ifdef DBG
@@ -21,8 +21,8 @@ void hash_action_func_print (struct hash_elem *e, void *aux){
 void remove_page(struct page *page){
 	struct thread *t = thread_current();
 	pml4_clear_page(t->pml4, page->va);
-	if(page->frame)
-		free(page->frame);
+	// if(page->frame)
+	// 	free(page->frame);
 	vm_dealloc_page (page);
 	// destroy(page); // uninit destroy - free aux
 	// free(page);
@@ -154,8 +154,8 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	pml4_clear_page(thread_current()->pml4, page->va);
 	hash_delete(&spt->spt_hash, &page->hash_elem);
 	
-	if(page->frame)
-		free(page->frame);
+	// if(page->frame)
+	// 	free(page->frame);
 	vm_dealloc_page (page);
 
 	return true;

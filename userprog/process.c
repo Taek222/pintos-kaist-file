@@ -511,8 +511,18 @@ process_cleanup(bool destroySPT)
 	struct thread *curr = thread_current();
 
 #ifdef VM
-	if (destroySPT)
+	if (destroySPT){
 		supplemental_page_table_kill(&curr->spt);
+
+		// Really exiting the process - empty the frame table, free all frames
+		while(!list_empty(&frame_table)){
+			struct frame *frame = list_entry(list_pop_front(&frame_table), struct frame, elem);
+			free(frame);
+		}
+		
+		// #ifdef DBG 지금 디자인은 global frame table이라서, parent와 child process가 frame_table을 공유하는데,
+		// child exit 때문에 parent frame이 다 free되는 비효율적인 상황이 나오지 않을까?
+	}
 	else
 		supplemental_page_table_clear(&curr->spt); // save SPT for later (process_exec)
 #endif
