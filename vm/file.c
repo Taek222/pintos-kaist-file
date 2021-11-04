@@ -3,6 +3,7 @@
 #include "vm/vm.h"
 
 //#define DBG
+#define DBG_swap
 
 static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
@@ -44,13 +45,59 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the file. */
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
-	struct file_page *file_page UNUSED = &page->file;
+	struct file_page *file_page = &page->file;
+	void *addr = page->va;
+	//struct thread *t = thread_current();
+
+	//aren't these already set in vm_do_claim_page?
+	//page->frame->kva = kva; 
+	//pml4_set_page(t->pml4, addr, kva, true); // writable true, as we are writing into the frame
+
+	struct file *file = file_reopen(file_page->file); //synchronize with file system
+	file_page->file = file;
+	size_t length = file_page->length;
+	off_t offset = file_page->offset;
+
+	if(file_read_at(file, addr, length, offset) != length){
+		// #ifdef DBG
+		// TODO - Not properly written-back
+	}
+	#ifdef DBG_swap
+		printf("(file_swap_in) page %p - frame %p\n", page->va, page->frame->kva);
+	#endif
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
-	struct file_page *file_page UNUSED = &page->file;
+	struct file_page *file_page = &page->file;
+	void *addr = page->va;
+	struct thread *t = thread_current();
+
+	if(pml4_is_dirty(t->pml4, addr)){
+		struct file *file = file_page->file;
+		size_t length = file_page->length;
+		off_t offset = file_page->offset;
+
+		if(file_write_at(file, addr, length, offset) != length){
+			// #ifdef DBG
+			// TODO - Not properly written-back
+		}
+	}
+
+	#ifdef DBG_swap
+		printf("(file_swap_out) page %p - frame %p\n", page->va, page->frame->kva);
+	#endif
+
+	// access to page now generates fault
+	pml4_clear_page(thread_current()->pml4, addr);
+
+	// Not really needed - New link created in 'vm_do_claim_page'
+	page->frame->page = NULL;
+	page->frame = NULL;
+
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
@@ -174,7 +221,8 @@ do_munmap (void *addr) {
 	struct page *page;
 
 	page = spt_find_page(&t->spt, addr);
-	int prev_cnt = 0;
+	//int prev_cnt = 0;
+	int prev_cnt = page->page_cnt - 1; //if the file size is bigger than memmory space, first page of consecutive file-pages in memory is not the first page of the file.
 
 	// Check if the page is file_page or uninit_page to be transmuted into file_page and then its consecutive
 	while(page != NULL 
