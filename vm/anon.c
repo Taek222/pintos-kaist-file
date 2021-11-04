@@ -4,7 +4,7 @@
 #include "devices/disk.h"
 
 // #define DBG
-#define DBG_swap
+// #define DBG_swap
 
 
 /* DO NOT MODIFY BELOW LINE */
@@ -74,7 +74,7 @@ anon_swap_in (struct page *page, void *kva) {
 // #endif
 	page->frame->kva = kva;
 
-	bitmap_set(swap_disk, swap_slot_idx, 0);
+	bitmap_set(swap_table, swap_slot_idx, 0);
 
 	// ASSERT(is_writable(kva) != false);
 
