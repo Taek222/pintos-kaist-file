@@ -483,12 +483,11 @@ void hash_action_destroy (struct hash_elem *e, void *aux){
 			}
 		}
 	}
-	/*
+	
 	if (page->frame != NULL){
-		list_remove(&page->frame->elem);
-		free(page->frame);		
+		page->frame->page = NULL;		
 	}
-	*/
+	
 	// destroy(page);
 	// free(page->frame);
 	// free(page);
