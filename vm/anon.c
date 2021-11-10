@@ -4,7 +4,7 @@
 #include "devices/disk.h"
 
 // #define DBG
-// #define DBG_swap
+//#define DBG_swap
 
 
 /* DO NOT MODIFY BELOW LINE */
@@ -117,7 +117,6 @@ anon_swap_out (struct page *page) {
 
 	anon_page->swap_sec = swap_sec;
 
-	// Not really needed - New link created in 'vm_do_claim_page'
 	page->frame->page = NULL;
 	page->frame = NULL;
 

@@ -7,7 +7,7 @@
 
 //#define DBG
 //#define DBG_SPT_COPY
-#define DBG_swap
+//#define DBG_swap
 
 
 #ifdef DBG
@@ -23,6 +23,9 @@ void remove_page(struct page *page){
 	pml4_clear_page(t->pml4, page->va);
 	// if(page->frame)
 	// 	free(page->frame);
+	if (page->frame != NULL){
+		page->frame->page = NULL;
+	}
 	vm_dealloc_page (page);
 	// destroy(page); // uninit destroy - free aux
 	// free(page);
@@ -156,6 +159,9 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	
 	// if(page->frame)
 	// 	free(page->frame);
+	if (page->frame != NULL){
+		page->frame->page = NULL;
+	}
 	vm_dealloc_page (page);
 
 	return true;
@@ -176,7 +182,12 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim = vm_get_victim();
 	/* TODO: swap out the victim and return the evicted frame. */
-	swap_out(victim->page);
+	#ifdef DBG_swap
+		printf("(vm_evict_frame) frame %p(page %p) selected and now swapping out\n", victim->kva, victim->page->va);
+	#endif
+	if(victim->page != NULL){
+		swap_out(victim->page);
+	}
 	// Manipulate swap table according to its design
 	return victim;
 }
@@ -209,9 +220,6 @@ vm_get_frame (void) {
 		*/
 		frame = vm_evict_frame();
 
-	#ifdef DBG_swap
-		printf("(vm_get_frame) palloc fail - got frame kva %p\n", frame->kva);
-	#endif 
 	}
 	else{
 		frame = malloc(sizeof(struct frame)); // #ifdef DEBUG - what if this fails?
@@ -357,6 +365,9 @@ static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
 
+	#ifdef DBG_swap
+		printf("(vm_do_claim_page) claiming page %p on frame %p\n",page->va,frame->kva);
+	#endif
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
@@ -377,6 +388,7 @@ vm_do_claim_page (struct page *page) {
 	if(!res)
 		printf("(vm_do_claim_page) Fail at va %p, kva %p\n", page->va, page->frame->kva); // not reached?
 	#endif
+	//list_push_back(&frame_table, &frame->elem);
 
 	return res;
 }
@@ -471,8 +483,12 @@ void hash_action_destroy (struct hash_elem *e, void *aux){
 			}
 		}
 	}
-
-
+	/*
+	if (page->frame != NULL){
+		list_remove(&page->frame->elem);
+		free(page->frame);		
+	}
+	*/
 	// destroy(page);
 	// free(page->frame);
 	// free(page);

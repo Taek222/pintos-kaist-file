@@ -3,7 +3,7 @@
 #include "vm/vm.h"
 
 //#define DBG
-#define DBG_swap
+//#define DBG_swap
 
 static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
@@ -56,8 +56,7 @@ file_backed_swap_in (struct page *page, void *kva) {
 	//page->frame->kva = kva; 
 	//pml4_set_page(t->pml4, addr, kva, true); // writable true, as we are writing into the frame
 
-	struct file *file = file_reopen(file_page->file); //synchronize with file system
-	file_page->file = file;
+	struct file *file = file_page->file;
 	size_t length = file_page->length;
 	off_t offset = file_page->offset;
 
@@ -82,8 +81,11 @@ file_backed_swap_out (struct page *page) {
 		struct file *file = file_page->file;
 		size_t length = file_page->length;
 		off_t offset = file_page->offset;
-
-		if(file_write_at(file, addr, length, offset) != length){
+		void *kva = page->frame->kva;
+		#ifdef DBG_swap
+			printf("(file_swap_out) writeback happened");
+		#endif
+		if(file_write_at(file, kva, length, offset) != length){
 			// #ifdef DBG
 			// TODO - Not properly written-back
 		}
@@ -94,12 +96,9 @@ file_backed_swap_out (struct page *page) {
 	#endif
 
 	// access to page now generates fault
-	pml4_clear_page(thread_current()->pml4, addr);
-
-	// Not really needed - New link created in 'vm_do_claim_page'
+	pml4_clear_page(t->pml4, addr);
 	page->frame->page = NULL;
 	page->frame = NULL;
-
 	return true;
 }
 
@@ -168,8 +167,8 @@ do_mmap (void *addr, size_t length, int writable,
 	// allocate at least one page
 	// throw off data that sticks out 
 	while(length > 0){
-		// Fail : pages mapped overlaps other existing pages
-		if(spt_find_page(&t->spt, addr) != NULL){
+		// Fail : pages mapped overlaps other existing pages or kernel memory
+		if(spt_find_page(&t->spt, addr) != NULL || is_kernel_vaddr(addr)){
 			void *free_addr = start_addr; // get page from this user vaddr and destroy them
 			while(free_addr < addr){
 				// free allocated uninit page
