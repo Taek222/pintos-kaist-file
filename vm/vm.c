@@ -441,30 +441,29 @@ void hash_action_copy (struct hash_elem *e, void *hash_aux){
 			newpage->page_cnt = page->page_cnt;
 		}
 	}
-	if(type & VM_ANON == VM_ANON || type == VM_FILE){ // include stack pages
+	if(type & VM_ANON == VM_ANON){ // include stack pages
 		//when __do_fork is called, thread_current is the child thread so we can just use vm_alloc_page
-		vm_alloc_page(type, page->va, true); // to verify memcpy to be performed, set writable to true
+		vm_alloc_page(type, page->va, page->writable);
 
 		struct page *newpage = spt_find_page(&t->spt, page->va); // copied page
 		vm_do_claim_page(newpage);
 
-		if(type == VM_FILE){
-			newpage->page_cnt = page->page_cnt;
-
-			struct file_page *file_page = &newpage->file;
-			file_page->file = file_duplicate(page->file.file); // duplicate, not just assign
-			file_page->length = page->file.length;
-			file_page->offset = page->file.offset;
-		}
-
 		ASSERT(page->frame != NULL);
 		memcpy(newpage->frame->kva, page->frame->kva, PGSIZE);
-		if(type == VM_FILE){
-			newpage->writable = false; // project3-mmap_inherit
-		}
-		else{
-			newpage->writable = page->writable; // return to original writable value
-		}
+	}
+	if(type == VM_FILE){
+		struct lazy_load_info *lazy_load_info = malloc(sizeof(struct lazy_load_info));
+		struct file_page *file_page = &page->file;
+		lazy_load_info->file = file_reopen(file_page->file);
+		lazy_load_info->page_read_bytes = file_page->length;
+		lazy_load_info->page_zero_bytes = PGSIZE - file_page->length;
+		lazy_load_info->offset = file_page->offset;
+		void *aux = lazy_load_info;
+		vm_alloc_page_with_initializer(type, page->va, page->writable, lazy_load_segment_for_file, aux);
+		struct page *newpage = spt_find_page(&t->spt, page->va); // copied page
+		vm_do_claim_page(newpage);
+		newpage->page_cnt = page->page_cnt;
+		newpage->writable = false;
 	}
 }
 void hash_action_destroy (struct hash_elem *e, void *aux){
