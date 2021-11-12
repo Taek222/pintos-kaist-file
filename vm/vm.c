@@ -443,7 +443,7 @@ void hash_action_copy (struct hash_elem *e, void *hash_aux){
 	}
 	if(type & VM_ANON == VM_ANON || type == VM_FILE){ // include stack pages
 		//when __do_fork is called, thread_current is the child thread so we can just use vm_alloc_page
-		vm_alloc_page(type, page->va, page->writable);
+		vm_alloc_page(type, page->va, true); // to verify memcpy to be performed, set writable to true
 
 		struct page *newpage = spt_find_page(&t->spt, page->va); // copied page
 		vm_do_claim_page(newpage);
@@ -459,9 +459,12 @@ void hash_action_copy (struct hash_elem *e, void *hash_aux){
 
 		ASSERT(page->frame != NULL);
 		memcpy(newpage->frame->kva, page->frame->kva, PGSIZE);
-	}
-	if(type == VM_FILE){
-
+		if(type == VM_FILE){
+			newpage->writable = false; // project3-mmap_inherit
+		}
+		else{
+			newpage->writable = page->writable; // return to original writable value
+		}
 	}
 }
 void hash_action_destroy (struct hash_elem *e, void *aux){

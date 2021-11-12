@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "intrinsic.h"
+#include "vm/vm.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -273,6 +274,16 @@ int read(int fd, void *buffer, unsigned size)
 	int ret;
 	struct thread *cur = thread_current();
 
+	#ifdef VM
+	// project 3 - pt_write_code2(block write on code segment)
+	int page_fault_trigger = ((int *)buffer)[1]; //pt_grow_stk_sc - arouse page fault before searching in spt.
+	struct supplemental_page_table *spt = &cur->spt;
+	struct page * page = spt_find_page (spt, buffer);
+	if (page->operations->type == VM_ANON && !(page->writable)){
+		exit(-1);
+	}
+	#endif
+
 	struct file *fileobj = find_file_by_fd(fd);
 	if (fileobj == NULL)
 		return -1;
@@ -471,7 +482,7 @@ int exec(char *file_name)
 // Project 3-3 mmap
 void *mmap (void *addr, size_t length, int writable, int fd, off_t offset){
 	// Fail : map to i/o console, zero length, map at 0, addr not page-aligned
-	if(fd == 0 || fd == 1 || length == 0 || addr == 0 || pg_ofs(addr) != 0)
+	if(fd == 0 || fd == 1 || length == 0 || addr == 0 || pg_ofs(addr) != 0 || offset > PGSIZE)
 		return NULL;
 
 	// Find file by fd
