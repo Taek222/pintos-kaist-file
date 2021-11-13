@@ -136,6 +136,7 @@ void syscall_handler(struct intr_frame *f)
 		munmap(f->R.rdi);
 		break;
 	default:
+		printf("(syscall_handler) Invalid syscall\n");
 		exit(-1);
 		break;
 	}
