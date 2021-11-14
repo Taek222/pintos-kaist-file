@@ -11,13 +11,15 @@
 
 
 #ifdef DBG
+// Print out elements in struct hash
 void hash_action_func_print (struct hash_elem *e, void *aux){
 	struct page *page = hash_entry(e, struct page, hash_elem);
 	printf("%p - ", page->va);
 }
 #endif
 
-// spt_remove_page without deleting the page from SPT hash
+// same as spt_remove_page except that it doesn't delete the page from SPT hash
+// only free page, not frame - just break the page-frame connection 
 void remove_page(struct page *page){
 	struct thread *t = thread_current();
 	pml4_clear_page(t->pml4, page->va);
@@ -84,10 +86,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 		bool (*initializer)(struct page *, enum vm_type, void *);
 		switch(type){
-			// # ifdef DEBUG 
-			// case VM_UNINIT:
-			// 	initializer = uninit_initialize;
-			// 	break;
 			case VM_ANON: case VM_ANON|VM_MARKER_0:
 				initializer = anon_initializer;
 				break;
@@ -97,8 +95,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		}
 		
 		struct page *new_page = malloc(sizeof(struct page));
-		// new_page->va = upage;
-		// vm_do_claim_page(new_page); // #ifdef DBG - false일때 처리?
 		uninit_new (new_page, upage, init, type, aux, initializer);
 
 		new_page->writable = writable;
@@ -219,7 +215,6 @@ vm_get_frame (void) {
 		-- 확실하진 않지만 일단 디자인이 이럼 --
 		*/
 		frame = vm_evict_frame();
-
 	}
 	else{
 		frame = malloc(sizeof(struct frame)); // #ifdef DEBUG - what if this fails?
@@ -453,6 +448,7 @@ void hash_action_copy (struct hash_elem *e, void *hash_aux){
 	}
 	if(type == VM_FILE){
 		struct lazy_load_info *lazy_load_info = malloc(sizeof(struct lazy_load_info));
+
 		struct file_page *file_page = &page->file;
 		lazy_load_info->file = file_reopen(file_page->file);
 		lazy_load_info->page_read_bytes = file_page->length;
@@ -460,8 +456,10 @@ void hash_action_copy (struct hash_elem *e, void *hash_aux){
 		lazy_load_info->offset = file_page->offset;
 		void *aux = lazy_load_info;
 		vm_alloc_page_with_initializer(type, page->va, page->writable, lazy_load_segment_for_file, aux);
+
 		struct page *newpage = spt_find_page(&t->spt, page->va); // copied page
 		vm_do_claim_page(newpage);
+		
 		newpage->page_cnt = page->page_cnt;
 		newpage->writable = false;
 	}
