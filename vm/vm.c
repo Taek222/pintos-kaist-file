@@ -7,22 +7,30 @@
 
 //#define DBG
 //#define DBG_SPT_COPY
+//#define DBG_swap
+
 
 #ifdef DBG
+// Print out elements in struct hash
 void hash_action_func_print (struct hash_elem *e, void *aux){
 	struct page *page = hash_entry(e, struct page, hash_elem);
 	printf("%p - ", page->va);
 }
 #endif
 
-// spt_remove_page without deleting the page from SPT hash
+// same as spt_remove_page except that it doesn't delete the page from SPT hash
+// only free page, not frame - just break the page-frame connection 
 void remove_page(struct page *page){
 	struct thread *t = thread_current();
 	pml4_clear_page(t->pml4, page->va);
-	destroy(page); // uninit destroy - free aux
-	if(page->frame)
-		free(page->frame);
-	free(page);
+	// if(page->frame)
+	// 	free(page->frame);
+	if (page->frame != NULL){
+		page->frame->page = NULL;
+	}
+	vm_dealloc_page (page);
+	// destroy(page); // uninit destroy - free aux
+	// free(page);
 }
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -37,6 +45,7 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	list_init(&frame_table);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -77,10 +86,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 		bool (*initializer)(struct page *, enum vm_type, void *);
 		switch(type){
-			// # ifdef DEBUG 
-			// case VM_UNINIT:
-			// 	initializer = uninit_initialize;
-			// 	break;
 			case VM_ANON: case VM_ANON|VM_MARKER_0:
 				initializer = anon_initializer;
 				break;
@@ -90,8 +95,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		}
 		
 		struct page *new_page = malloc(sizeof(struct page));
-		// new_page->va = upage;
-		// vm_do_claim_page(new_page); // #ifdef DBG - false일때 처리?
 		uninit_new (new_page, upage, init, type, aux, initializer);
 
 		new_page->writable = writable;
@@ -149,6 +152,12 @@ void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	pml4_clear_page(thread_current()->pml4, page->va);
 	hash_delete(&spt->spt_hash, &page->hash_elem);
+	
+	// if(page->frame)
+	// 	free(page->frame);
+	if (page->frame != NULL){
+		page->frame->page = NULL;
+	}
 	vm_dealloc_page (page);
 
 	return true;
@@ -159,7 +168,7 @@ static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
-
+	victim = list_entry(list_pop_front(&frame_table), struct frame, elem); // FIFO algorithm
 	return victim;
 }
 
@@ -167,10 +176,16 @@ vm_get_victim (void) {
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
-	struct frame *victim UNUSED = vm_get_victim ();
+	struct frame *victim = vm_get_victim();
 	/* TODO: swap out the victim and return the evicted frame. */
-
-	return NULL;
+	#ifdef DBG_swap
+		printf("(vm_evict_frame) frame %p(page %p) selected and now swapping out\n", victim->kva, victim->page->va);
+	#endif
+	if(victim->page != NULL){
+		swap_out(victim->page);
+	}
+	// Manipulate swap table according to its design
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -181,6 +196,7 @@ static struct frame *
 vm_get_frame (void) {
 	/* TODO: Fill this function. */
 	void * kva = palloc_get_page(PAL_USER);
+	struct frame *frame = NULL;
 	if (kva == NULL){
 		// Todo... eviction
 		/*
@@ -198,11 +214,14 @@ vm_get_frame (void) {
 
 		-- 확실하진 않지만 일단 디자인이 이럼 --
 		*/
+		frame = vm_evict_frame();
 	}
-
-	struct frame *frame = malloc(sizeof(struct frame)); // #ifdef DEBUG - what if this fails?
-	frame->kva = kva;
+	else{
+		frame = malloc(sizeof(struct frame)); // #ifdef DEBUG - what if this fails?
+		frame->kva = kva;
+	}
 	// frame->page = malloc(sizeof(struct page));
+	// list_push_back(&frame_table, &frame->elem); // BUG - physical memory overlap; lazy_load_info offset and before->prev->next
 
 	ASSERT (frame != NULL);
 	// ASSERT (frame->page == NULL); // #ifdef DEBUG
@@ -293,6 +312,13 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	else printf("XX frame map fail on %p XX\n\n", fpage->va);
 	#endif
 
+	if (gotFrame)
+		list_push_back(&frame_table, &fpage->frame->elem);
+	#ifdef DBG_swap
+	else
+		printf("Fault at %p\n", page->va);
+	#endif
+
 	return gotFrame;
 }
 
@@ -301,8 +327,8 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 void
 vm_dealloc_page (struct page *page) {
 	destroy (page);
-	if(page->frame)
-		free(page->frame);
+	// if(page->frame)
+	// 	free(page->frame);
 	free (page);
 }
 
@@ -334,6 +360,9 @@ static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
 
+	#ifdef DBG_swap
+		printf("(vm_do_claim_page) claiming page %p on frame %p\n",page->va,frame->kva);
+	#endif
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
@@ -348,7 +377,15 @@ vm_do_claim_page (struct page *page) {
 	pml4_set_page(cur->pml4, page->va, frame->kva, writable);
 	// add the mapping from the virtual address to the physical address in the page table.
 
-	return swap_in (page, frame->kva);
+	bool res = swap_in (page, frame->kva);
+
+	#ifdef DBG_swap
+	if(!res)
+		printf("(vm_do_claim_page) Fail at va %p, kva %p\n", page->va, page->frame->kva); // not reached?
+	#endif
+	//list_push_back(&frame_table, &frame->elem);
+
+	return res;
 }
 
 /* Initialize new supplemental page table */
@@ -399,27 +436,32 @@ void hash_action_copy (struct hash_elem *e, void *hash_aux){
 			newpage->page_cnt = page->page_cnt;
 		}
 	}
-	if(type & VM_ANON == VM_ANON || type == VM_FILE){ // include stack pages
+	if(type & VM_ANON == VM_ANON){ // include stack pages
 		//when __do_fork is called, thread_current is the child thread so we can just use vm_alloc_page
 		vm_alloc_page(type, page->va, page->writable);
 
 		struct page *newpage = spt_find_page(&t->spt, page->va); // copied page
 		vm_do_claim_page(newpage);
 
-		if(type == VM_FILE){
-			newpage->page_cnt = page->page_cnt;
-
-			struct file_page *file_page = &newpage->file;
-			file_page->file = file_duplicate(page->file.file); // duplicate, not just assign
-			file_page->length = page->file.length;
-			file_page->offset = page->file.offset;
-		}
-
 		ASSERT(page->frame != NULL);
 		memcpy(newpage->frame->kva, page->frame->kva, PGSIZE);
 	}
 	if(type == VM_FILE){
+		struct lazy_load_info *lazy_load_info = malloc(sizeof(struct lazy_load_info));
 
+		struct file_page *file_page = &page->file;
+		lazy_load_info->file = file_reopen(file_page->file);
+		lazy_load_info->page_read_bytes = file_page->length;
+		lazy_load_info->page_zero_bytes = PGSIZE - file_page->length;
+		lazy_load_info->offset = file_page->offset;
+		void *aux = lazy_load_info;
+		vm_alloc_page_with_initializer(type, page->va, page->writable, lazy_load_segment_for_file, aux);
+
+		struct page *newpage = spt_find_page(&t->spt, page->va); // copied page
+		vm_do_claim_page(newpage);
+		
+		newpage->page_cnt = page->page_cnt;
+		newpage->writable = false;
 	}
 }
 void hash_action_destroy (struct hash_elem *e, void *aux){
@@ -441,8 +483,11 @@ void hash_action_destroy (struct hash_elem *e, void *aux){
 			}
 		}
 	}
-
-
+	
+	if (page->frame != NULL){
+		page->frame->page = NULL;		
+	}
+	
 	// destroy(page);
 	// free(page->frame);
 	// free(page);
@@ -474,5 +519,6 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 // Used in process_exec - process_cleanup : don't destroy SPT when it will be used afterwards!
 void
 supplemental_page_table_clear (struct supplemental_page_table *spt UNUSED) {
-	hash_clear(&spt->spt_hash, hash_action_destroy);
+	//hash_clear(&spt->spt_hash, hash_action_destroy); // exec-once
+	hash_clear(&spt->spt_hash, NULL);
 }

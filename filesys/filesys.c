@@ -23,6 +23,9 @@ filesys_init (bool format) {
 
 	inode_init ();
 
+	// Project 3. (parallel-merge)
+	lock_init(&filesys_lock);
+
 #ifdef EFILESYS
 	fat_init ();
 
@@ -59,6 +62,8 @@ filesys_done (void) {
  * or if internal memory allocation fails. */
 bool
 filesys_create (const char *name, off_t initial_size) {
+	lock_acquire(&filesys_lock);
+
 	disk_sector_t inode_sector = 0;
 	struct dir *dir = dir_open_root ();
 	bool success = (dir != NULL
@@ -68,6 +73,8 @@ filesys_create (const char *name, off_t initial_size) {
 	if (!success && inode_sector != 0)
 		free_map_release (inode_sector, 1);
 	dir_close (dir);
+
+	lock_release(&filesys_lock);
 
 	return success;
 }
@@ -79,6 +86,8 @@ filesys_create (const char *name, off_t initial_size) {
  * or if an internal memory allocation fails. */
 struct file *
 filesys_open (const char *name) {
+	lock_acquire(&filesys_lock);
+
 	struct dir *dir = dir_open_root ();
 	struct inode *inode = NULL;
 
@@ -86,7 +95,11 @@ filesys_open (const char *name) {
 		dir_lookup (dir, name, &inode);
 	dir_close (dir);
 
-	return file_open (inode);
+	struct file *file = file_open (inode);
+	
+	lock_release(&filesys_lock);
+
+	return file;
 }
 
 /* Deletes the file named NAME.
@@ -95,9 +108,13 @@ filesys_open (const char *name) {
  * or if an internal memory allocation fails. */
 bool
 filesys_remove (const char *name) {
+	lock_acquire(&filesys_lock);
+
 	struct dir *dir = dir_open_root ();
 	bool success = dir != NULL && dir_remove (dir, name);
 	dir_close (dir);
+
+	lock_release(&filesys_lock);
 
 	return success;
 }

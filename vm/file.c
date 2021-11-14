@@ -3,6 +3,7 @@
 #include "vm/vm.h"
 
 //#define DBG
+//#define DBG_swap
 
 static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
@@ -38,30 +39,81 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	file_page->file = info->file;
 	file_page->length = info->page_read_bytes;
 	file_page->offset = info->offset;
+	return true;
 }
 
 /* Swap in the page by read contents from the file. */
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
-	struct file_page *file_page UNUSED = &page->file;
+	struct file_page *file_page = &page->file;
+
+	ASSERT(page->frame->kva == kva); // #ifdef DBG check
+
+	void *addr = page->va;
+	//struct thread *t = thread_current();
+
+	//aren't these already set in vm_do_claim_page?
+	//page->frame->kva = kva; 
+	//pml4_set_page(t->pml4, addr, kva, true); // writable true, as we are writing into the frame
+
+	struct file *file = file_page->file;
+	size_t length = file_page->length;
+	off_t offset = file_page->offset;
+
+	if(file_read_at(file, kva, length, offset) != length){
+		// #ifdef DBG
+		// TODO - Not properly written-back
+	}
+	#ifdef DBG_swap
+		printf("(file_swap_in) page %p - frame %p\n", page->va, page->frame->kva);
+	#endif
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
-	struct file_page *file_page UNUSED = &page->file;
+	struct file_page *file_page = &page->file;
+	void *addr = page->va;
+	struct thread *t = thread_current();
+
+	if(pml4_is_dirty(t->pml4, addr)){
+		struct file *file = file_page->file;
+		size_t length = file_page->length;
+		off_t offset = file_page->offset;
+		void *kva = page->frame->kva;
+		#ifdef DBG_swap
+			printf("(file_swap_out) writeback happened");
+		#endif
+		if(file_write_at(file, kva, length, offset) != length){
+			// #ifdef DBG
+			// TODO - Not properly written-back
+		}
+	}
+
+	#ifdef DBG_swap
+		printf("(file_swap_out) page %p - frame %p\n", page->va, page->frame->kva);
+	#endif
+
+	// access to page now generates fault
+	pml4_clear_page(t->pml4, addr);
+	page->frame->page = NULL;
+	page->frame = NULL;
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
 static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+
+	close(file_page->file);
 }
 
 // used in lazy allocation - from process.c
 // 나중에 struct file_page에 vm_initializer *init 같은거 만들어서 uninit의 init 함수 (lazy_load_segment) 넘겨주는 식으로 리팩토링 
 // -> X uninit page 만드는거야
-static bool
+bool
 lazy_load_segment_for_file(struct page *page, void *aux)
 {
 	/* TODO: Load the segment from the file */
@@ -115,8 +167,8 @@ do_mmap (void *addr, size_t length, int writable,
 	// allocate at least one page
 	// throw off data that sticks out 
 	while(length > 0){
-		// Fail : pages mapped overlaps other existing pages
-		if(spt_find_page(&t->spt, addr) != NULL){
+		// Fail : pages mapped overlaps other existing pages or kernel memory
+		if(spt_find_page(&t->spt, addr) != NULL || is_kernel_vaddr(addr)){
 			void *free_addr = start_addr; // get page from this user vaddr and destroy them
 			while(free_addr < addr){
 				// free allocated uninit page
@@ -173,7 +225,8 @@ do_munmap (void *addr) {
 	struct page *page;
 
 	page = spt_find_page(&t->spt, addr);
-	int prev_cnt = 0;
+	//int prev_cnt = 0;
+	int prev_cnt = page->page_cnt - 1; //if the file size is bigger than memmory space, first page of consecutive file-pages in memory is not the first page of the file.
 
 	// Check if the page is file_page or uninit_page to be transmuted into file_page and then its consecutive
 	while(page != NULL 
