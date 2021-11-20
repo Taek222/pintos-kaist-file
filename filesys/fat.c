@@ -31,13 +31,14 @@ static struct fat_fs *fat_fs;
 void fat_boot_create (void);
 void fat_fs_init (void);
 
+struct bitmap * fat_bitmap;
+
 cluster_t get_empty_cluster () {
-	for (unsigned i = 0; i < fat_fs->bs.fat_sectors; i++) {
-		if (fat_fs->fat[i] == 0){ // is it initialized to zero when read from filesys_disk?
-			return (cluster_t) i + 1; // index starts with 0, but cluster starts with 1
-		}
-	}
-	return 0;
+	size_t clst = bitmap_scan_and_flip(fat_bitmap, 0, 1, false) + 1; // index starts with 0, but cluster starts with 1
+	if (clst == BITMAP_ERROR)  
+		return 0;
+	else
+		return (cluster_t) clst;
 }
 
 
@@ -59,6 +60,7 @@ fat_init (void) {
 	if (fat_fs->bs.magic != FAT_MAGIC)
 		fat_boot_create ();
 	fat_fs_init ();
+	fat_bitmap = bitmap_create(fat_fs->fat_length);
 }
 
 void
@@ -192,11 +194,10 @@ fat_create_chain (cluster_t clst) {
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
-	cluster_t next_clst = fat_get(clst);
-	if (next_clst != EOChain){
-		fat_remove_chain(next_clst, clst); // recursion
+	while(clst != EOChain){
+		bitmap_set(fat_bitmap, clst - 1, false);
+		clst = fat_get(clst);
 	}
-	fat_put(clst, 0);
 	if (pclst != 0){
 		fat_put(pclst, EOChain);
 	}
@@ -213,6 +214,8 @@ fat_put (cluster_t clst, cluster_t val) {
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	if (clst > fat_fs->fat_length)
+		return 0; // error handling for fat_get(EOChain)
 	return fat_fs->fat[clst - 1];
 }
 
@@ -221,4 +224,10 @@ disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
 	return (clst - 1) * SECTORS_PER_CLUSTER + 1;
+}
+
+// Prj 4-1 : reverse function for clst_to_sect
+cluster_t 
+sector_to_cluster (disk_sector_t sector) {
+	return (sector + SECTORS_PER_CLUSTER - 1) / SECTORS_PER_CLUSTER;
 }
