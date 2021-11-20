@@ -31,6 +31,16 @@ static struct fat_fs *fat_fs;
 void fat_boot_create (void);
 void fat_fs_init (void);
 
+cluster_t get_empty_cluster () {
+	for (unsigned i = 0; i < fat_fs->bs.fat_sectors; i++) {
+		if (fat_fs->fat[i] == 0){ // is it initialized to zero when read from filesys_disk?
+			return (cluster_t) i + 1; // index starts with 0, but cluster starts with 1
+		}
+	}
+	return 0;
+}
+
+
 void
 fat_init (void) {
 	fat_fs = calloc (1, sizeof (struct fat_fs));
@@ -153,6 +163,8 @@ fat_boot_create (void) {
 void
 fat_fs_init (void) {
 	/* TODO: Your code goes here. */
+	fat_fs->fat_length = (fat_fs->bs.fat_sectors + SECTORS_PER_CLUSTER - 1) / SECTORS_PER_CLUSTER;
+	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -165,6 +177,14 @@ fat_fs_init (void) {
 cluster_t
 fat_create_chain (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	cluster_t new_clst = get_empty_cluster();
+	if (new_clst != 0){
+		fat_put(new_clst, EOChain);
+		if (clst != 0){
+			fat_put(clst, new_clst);
+		}
+	}
+	return new_clst;
 }
 
 /* Remove the chain of clusters starting from CLST.
@@ -172,22 +192,33 @@ fat_create_chain (cluster_t clst) {
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
+	cluster_t next_clst = fat_get(clst);
+	if (next_clst != EOChain){
+		fat_remove_chain(next_clst, clst); // recursion
+	}
+	fat_put(clst, 0);
+	if (pclst != 0){
+		fat_put(pclst, EOChain);
+	}
 }
 
 /* Update a value in the FAT table. */
 void
 fat_put (cluster_t clst, cluster_t val) {
 	/* TODO: Your code goes here. */
+	fat_fs->fat[clst - 1] = val;
 }
 
 /* Fetch a value in the FAT table. */
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	return fat_fs->fat[clst - 1];
 }
 
 /* Covert a cluster # to a sector number. */
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	return (clst - 1) * SECTORS_PER_CLUSTER + 1;
 }
