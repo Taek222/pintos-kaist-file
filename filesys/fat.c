@@ -223,11 +223,11 @@ fat_get (cluster_t clst) {
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	return (clst - 1) * SECTORS_PER_CLUSTER + 1;
+	return fat_fs->data_start + (clst - 1) * SECTORS_PER_CLUSTER + 1;
 }
 
 // Prj 4-1 : reverse function for clst_to_sect
 cluster_t 
 sector_to_cluster (disk_sector_t sector) {
-	return (sector + SECTORS_PER_CLUSTER - 1) / SECTORS_PER_CLUSTER;
+	return (sector + SECTORS_PER_CLUSTER - 1) / SECTORS_PER_CLUSTER - fat_fs->data_start;
 }
