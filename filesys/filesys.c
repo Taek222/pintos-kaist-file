@@ -17,6 +17,32 @@ struct disk *filesys_disk;
 
 static void do_format (void);
 
+// Project 4-2 : fime path parsing
+struct path{
+	char ** dirnames; //list of directories
+	int dircount; //level of directory
+	char * filename; //
+};
+
+struct path parse_filepath (const char *name){
+	struct path path;
+	char *buf[30];
+	int i = 0;
+
+	char *token, *save_ptr;
+	token = strtok_r(name, "/", &save_ptr);
+	while (token != NULL)
+	{
+		buf[i] = token;
+		token = strtok_r(NULL, "/", &save_ptr);
+		i++;
+	}
+	path.dirnames = buf;
+	path.dircount = i-1;
+	path.filename = buf[i];
+	return path;
+}
+
 /* Initializes the file system module.
  * If FORMAT is true, reformats the file system. */
 void
@@ -67,7 +93,10 @@ filesys_done (void) {
 bool
 filesys_create (const char *name, off_t initial_size) {
 	lock_acquire(&filesys_lock);
-
+	#ifdef EFILESYS
+		struct path = parse_filepath(name);
+		struct dir *dir = dir_open(find_subdir(path.dirnames, path.dircount));
+	#endif
 	disk_sector_t inode_sector = 0;
 	struct dir *dir = dir_open_root ();
 	bool success = (dir != NULL

@@ -142,6 +142,9 @@ struct thread
 
 	// Project 3-2 stack growth
 	uint64_t rsp; // a page fault occurs in the kernel
+#ifdef EFILESYS
+	struct dir *wd; // current working directory
+#endif
 
 	/* Owned by thread.c. */
 	struct intr_frame tf; /* Information for switching */

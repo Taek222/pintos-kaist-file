@@ -5,6 +5,7 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 
 /* A directory. */
 struct dir {
@@ -18,6 +19,25 @@ struct dir_entry {
 	char name[NAME_MAX + 1];            /* Null terminated file name. */
 	bool in_use;                        /* In use or free? */
 };
+
+//Project 4-2
+// find current working directory
+struct dir *current_directory(){
+	return thread_current()->wd;
+}
+// find subdirectory's inode
+struct inode *find_subdir(char ** dirnames, int dircount){
+	int i;
+	struct inode *inode = NULL;
+	struct dir *subdir = dir_lookup(current_directory, dirnames[0], &inode);
+	for(i = 1; i <= dircount; i++){
+		struct dir *olddir = subdir;
+		dir_lookup(olddir, dirnames[i], &inode);
+		subdir = dir_open(inode);
+		dir_close(olddir);
+	}
+	return dir_get_inode(subdir);
+}
 
 /* Creates a directory with space for ENTRY_CNT entries in the
  * given SECTOR.  Returns true if successful, false on failure. */

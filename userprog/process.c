@@ -21,6 +21,9 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
+#ifdef EFILESYS
+#include "filesys/directory.h"
+#endif
 
 //#define DEBUG
 //#define DEBUG_WAIT
@@ -497,6 +500,10 @@ void process_exit(void)
 	file_close(cur->running);
 
 	process_cleanup(true); // destroy SPT
+
+	#ifdef EFILESYS
+		dir_close(cur->wd);
+	#endif
 
 	// Wake up blocked parent
 	sema_up(&cur->wait_sema);

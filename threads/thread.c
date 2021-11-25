@@ -14,6 +14,9 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#ifdef EFILESYS
+#include "filesys/directory.h"
+#endif
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -129,6 +132,10 @@ void thread_init(void)
 		initial_thread->nice = 0;
 		initial_thread->priority = PRI_MAX;
 	}
+	// Project 4-2
+	#ifdef EFILESYS
+		initial_thread->wd = dir_open_root();
+	#endif
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
