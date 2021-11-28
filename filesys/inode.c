@@ -97,23 +97,26 @@ inode_create (disk_sector_t sector, off_t length) {
 		disk_inode->magic = INODE_MAGIC;
 		#ifdef EFILESYS
 		// cluster_t clst = sector_to_cluster(disk_inode->start); // #ifdef DBG Q. disk_inode->start 무조건 0아님?
-		cluster_t clst = sector_to_cluster(sector), newclst; // save clst in case of chaining failure
+		cluster_t clst = sector_to_cluster(sector); 
+		cluster_t newclst = clst; // save clst in case of chaining failure
 
-		if(fat_get(clst)) {
-			printf("(inode_create) FAT already occupied at cluster %d (input sector %d)\n", clst, sector);
-			return false; // FAT already occupied
-		}
+		// if(fat_get(clst)) {
+		// 	printf("(inode_create) FAT already occupied at cluster %d (input sector %d)\n", clst, sector);
+		// 	return false; // FAT already occupied
+		// }
 
 		int i;
 		for (i = 0; i < sectors; i++){
 			// if (i != 0)
-			newclst = fat_create_chain(clst);
+			newclst = fat_create_chain(newclst);
 			if (newclst == 0){ // chain 생성 실패 시 (fails to allocate a new cluster)
 				fat_remove_chain(clst, 0);
 				return false;
 			}
-			if (i == 0)
-				clst = disk_inode->start = cluster_to_sector(newclst); // set start point of the file
+			if (i == 0){
+				clst = newclst;
+				disk_inode->start = cluster_to_sector(newclst); // set start point of the file
+			}
 		}
 		disk_write (filesys_disk, sector, disk_inode);
 		if (sectors > 0) {

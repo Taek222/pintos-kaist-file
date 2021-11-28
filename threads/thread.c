@@ -134,7 +134,7 @@ void thread_init(void)
 	}
 	// Project 4-2
 	#ifdef EFILESYS
-		initial_thread->wd = dir_open_root();
+		// initial_thread->wd = dir_open_root(); // #ifdef DBG 🚨 call before filesys_init - inode_init causes error
 	#endif
 }
 

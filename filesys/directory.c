@@ -7,37 +7,39 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 
+#include "filesys/fat.h"
+
 /* A directory. */
 struct dir {
 	struct inode *inode;                /* Backing store. */
-	off_t pos;                          /* Current position. */
+	off_t pos;                          /* Current position. */ // dir_readdir에서 사용; 어느 entry까지 읽었나
 };
 
-/* A single directory entry. */
-struct dir_entry {
-	disk_sector_t inode_sector;         /* Sector number of header. */
-	char name[NAME_MAX + 1];            /* Null terminated file name. */
-	bool in_use;                        /* In use or free? */
-};
+// /* A single directory entry. */
+// struct dir_entry {
+// 	disk_sector_t inode_sector;         /* Sector number of header. */
+// 	char name[NAME_MAX + 1];            /* Null terminated file name. */
+// 	bool in_use;                        /* In use or free? */
+// };
 
 //Project 4-2
 // find current working directory
 struct dir *current_directory(){
 	return thread_current()->wd;
 }
-// find subdirectory's inode
-struct inode *find_subdir(char ** dirnames, int dircount){
-	int i;
-	struct inode *inode = NULL;
-	struct dir *subdir = dir_lookup(current_directory, dirnames[0], &inode);
-	for(i = 1; i <= dircount; i++){
-		struct dir *olddir = subdir;
-		dir_lookup(olddir, dirnames[i], &inode);
-		subdir = dir_open(inode);
-		dir_close(olddir);
-	}
-	return dir_get_inode(subdir);
-}
+// // find subdirectory's inode
+// struct inode *find_subdir(char ** dirnames, int dircount){
+// 	int i;
+// 	struct inode *inode = NULL;
+// 	struct dir *subdir = dir_lookup(current_directory, dirnames[0], &inode); // 🚨 #ifdef mismatch
+// 	for(i = 1; i <= dircount; i++){
+// 		struct dir *olddir = subdir;
+// 		dir_lookup(olddir, dirnames[i], &inode);
+// 		subdir = dir_open(inode);
+// 		dir_close(olddir);
+// 	}
+// 	return dir_get_inode(subdir);
+// }
 
 /* Creates a directory with space for ENTRY_CNT entries in the
  * given SECTOR.  Returns true if successful, false on failure. */
@@ -66,7 +68,7 @@ dir_open (struct inode *inode) {
  * Return true if successful, false on failure. */
 struct dir *
 dir_open_root (void) {
-	return dir_open (inode_open (ROOT_DIR_SECTOR));
+	return dir_open (inode_open (cluster_to_sector(ROOT_DIR_CLUSTER)));
 }
 
 /* Opens and returns a new directory for the same inode as DIR.
@@ -153,7 +155,7 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) {
 	ASSERT (name != NULL);
 
 	/* Check NAME for validity. */
-	if (*name == '\0' || strlen (name) > NAME_MAX)
+	if (*name == '\0' || strlen (name) > NAME_MAX) // #ifdef DBG file name limit - optional to keep or change
 		return false;
 
 	/* Check that NAME is not in use. */
@@ -163,6 +165,8 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) {
 	/* Set OFS to offset of free slot.
 	 * If there are no free slots, then it will be set to the
 	 * current end-of-file.
+
+	// dir_entry 테이블 (dir->inode)의 빈칸을 찾아서 삽입
 
 	 * inode_read_at() will only return a short read at end of file.
 	 * Otherwise, we'd need to verify that we didn't get a short

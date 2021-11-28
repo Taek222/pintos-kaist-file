@@ -8,10 +8,6 @@
 #include "filesys/directory.h"
 #include "devices/disk.h"
 
-#ifdef EFILESYS
-	#include "filesys/fat.h"
-#endif
-
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
 
@@ -176,7 +172,8 @@ do_format (void) {
 #ifdef EFILESYS
 	/* Create FAT and save it to the disk. */
 	fat_create ();
-	if (!dir_create (ROOT_DIR_SECTOR, 16)) // #ifdef DBG 16 files limit? get rid of it?
+	fat_put(ROOT_DIR_CLUSTER, 0);
+	if (!dir_create (cluster_to_sector(ROOT_DIR_CLUSTER), DISK_SECTOR_SIZE/sizeof (struct dir_entry))) // file number limit
 		PANIC ("root directory creation failed");
 	fat_close ();
 #else
