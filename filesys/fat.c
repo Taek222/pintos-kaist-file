@@ -10,8 +10,8 @@
 struct fat_boot {
 	unsigned int magic;
 	unsigned int sectors_per_cluster; /* Fixed to 1 */
-	unsigned int total_sectors;
-	unsigned int fat_start;
+	unsigned int total_sectors; // total number of sectors in disk
+	unsigned int fat_start; // start sector in disk to store FAT (fat_open, fat_close)
 	unsigned int fat_sectors; /* Size of FAT in sectors. */
 	unsigned int root_dir_cluster;
 };
@@ -19,9 +19,9 @@ struct fat_boot {
 /* FAT FS */
 struct fat_fs {
 	struct fat_boot bs;
-	unsigned int *fat;
-	unsigned int fat_length;
-	disk_sector_t data_start;
+	unsigned int *fat; // FAT
+	unsigned int fat_length; // how many clusters in the filesystem
+	disk_sector_t data_start; // in which sector we can start to store files
 	cluster_t last_clst;
 	struct lock write_lock;
 };
@@ -60,7 +60,8 @@ fat_init (void) {
 	if (fat_fs->bs.magic != FAT_MAGIC)
 		fat_boot_create ();
 	fat_fs_init ();
-	fat_bitmap = bitmap_create(fat_fs->fat_length);
+
+	fat_bitmap = bitmap_create(fat_fs->fat_length); // #ifdef DBG Q. 0번째는 ROOT_DIR_CLUSTER니까 1로 채워넣어야 하지 않을까?
 }
 
 void
@@ -77,8 +78,7 @@ fat_open (void) {
 	for (unsigned i = 0; i < fat_fs->bs.fat_sectors; i++) {
 		bytes_left = fat_size_in_bytes - bytes_read;
 		if (bytes_left >= DISK_SECTOR_SIZE) {
-			disk_read (filesys_disk, fat_fs->bs.fat_start + i,
-			           buffer + bytes_read);
+			disk_read (filesys_disk, fat_fs->bs.fat_start + i, buffer + bytes_read);
 			bytes_read += DISK_SECTOR_SIZE;
 		} else {
 			uint8_t *bounce = malloc (DISK_SECTOR_SIZE);
@@ -151,21 +151,28 @@ void
 fat_boot_create (void) {
 	unsigned int fat_sectors =
 	    (disk_size (filesys_disk) - 1)
-	    / (DISK_SECTOR_SIZE / sizeof (cluster_t) * SECTORS_PER_CLUSTER + 1) + 1;
+	    / (DISK_SECTOR_SIZE / sizeof (cluster_t) * SECTORS_PER_CLUSTER + 1) + 1; // 특별한 의미는 없는 듯. 그냥 FAT 사이즈 미리 결정
 	fat_fs->bs = (struct fat_boot){
 	    .magic = FAT_MAGIC,
 	    .sectors_per_cluster = SECTORS_PER_CLUSTER,
 	    .total_sectors = disk_size (filesys_disk),
-	    .fat_start = 1,
+	    .fat_start = 1, // Sector 0 is BOOT_SECTOR
 	    .fat_sectors = fat_sectors,
 	    .root_dir_cluster = ROOT_DIR_CLUSTER,
 	};
+	// ex) total sectors 20160, fat_sectors = 157
 }
 
 void
 fat_fs_init (void) {
 	/* TODO: Your code goes here. */
-	fat_fs->fat_length = (fat_fs->bs.fat_sectors + SECTORS_PER_CLUSTER - 1) / SECTORS_PER_CLUSTER;
+
+	// Invariant : SECTORS_PER_CLUSTER == 1
+	ASSERT(SECTORS_PER_CLUSTER == 1);
+
+	// how many clusters in the filesystem
+	fat_fs->fat_length = fat_fs->bs.fat_sectors * DISK_SECTOR_SIZE / sizeof (cluster_t); // ex) 157 sectors * 512 bytes/sector % 4 bytes/cluster = 20096 clusters in FAT
+	// in which sector we can start to store FAT on the disk
 	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
 }
 
@@ -207,6 +214,8 @@ fat_remove_chain (cluster_t clst, cluster_t pclst) {
 void
 fat_put (cluster_t clst, cluster_t val) {
 	/* TODO: Your code goes here. */
+	ASSERT(clst >= 1);
+	if(!bitmap_test(fat_bitmap, clst - 1)) bitmap_mark(fat_bitmap, clst - 1);
 	fat_fs->fat[clst - 1] = val;
 }
 
@@ -214,8 +223,10 @@ fat_put (cluster_t clst, cluster_t val) {
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	if (clst > fat_fs->fat_length)
-		return 0; // error handling for fat_get(EOChain)
+	ASSERT(clst >= 1);
+
+	if (clst > fat_fs->fat_length || !bitmap_test(fat_bitmap, clst - 1))
+		return 0; // error handling for fat_get(EOChain) or empty
 	return fat_fs->fat[clst - 1];
 }
 
@@ -223,11 +234,17 @@ fat_get (cluster_t clst) {
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	return fat_fs->data_start + (clst - 1) * SECTORS_PER_CLUSTER + 1;
+	ASSERT(clst >= 1);
+
+	// clst 1 -> sector 158 (fat_fs->data_start)
+	return fat_fs->data_start + (clst - 1) * SECTORS_PER_CLUSTER;
 }
 
 // Prj 4-1 : reverse function for clst_to_sect
 cluster_t 
 sector_to_cluster (disk_sector_t sector) {
-	return (sector + SECTORS_PER_CLUSTER - 1) / SECTORS_PER_CLUSTER - fat_fs->data_start;
+	ASSERT(sector >= fat_fs->data_start);
+
+	// sector 158 -> clst 1
+	return sector - fat_fs->data_start + 1;
 }
