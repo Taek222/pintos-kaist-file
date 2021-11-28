@@ -60,6 +60,7 @@ fat_init (void) {
 	if (fat_fs->bs.magic != FAT_MAGIC)
 		fat_boot_create ();
 	fat_fs_init ();
+
 	fat_bitmap = bitmap_create(fat_fs->fat_length); // #ifdef DBG Q. 0번째는 ROOT_DIR_CLUSTER니까 1로 채워넣어야 하지 않을까?
 }
 
@@ -77,8 +78,7 @@ fat_open (void) {
 	for (unsigned i = 0; i < fat_fs->bs.fat_sectors; i++) {
 		bytes_left = fat_size_in_bytes - bytes_read;
 		if (bytes_left >= DISK_SECTOR_SIZE) {
-			disk_read (filesys_disk, fat_fs->bs.fat_start + i,
-			           buffer + bytes_read); // #ifdef DBG buffer는 cluster 정보 담고 있는 테이블인데, 거기다가 read/write 한다고??
+			disk_read (filesys_disk, fat_fs->bs.fat_start + i, buffer + bytes_read);
 			bytes_read += DISK_SECTOR_SIZE;
 		} else {
 			uint8_t *bounce = malloc (DISK_SECTOR_SIZE);
@@ -214,6 +214,8 @@ fat_remove_chain (cluster_t clst, cluster_t pclst) {
 void
 fat_put (cluster_t clst, cluster_t val) {
 	/* TODO: Your code goes here. */
+	ASSERT(clst >= 1);
+	if(!bitmap_test(fat_bitmap, clst - 1)) bitmap_mark(fat_bitmap, clst - 1);
 	fat_fs->fat[clst - 1] = val;
 }
 
@@ -221,8 +223,10 @@ fat_put (cluster_t clst, cluster_t val) {
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	if (clst > fat_fs->fat_length)
-		return 0; // error handling for fat_get(EOChain)
+	ASSERT(clst >= 1);
+
+	if (clst > fat_fs->fat_length || !bitmap_test(fat_bitmap, clst - 1))
+		return 0; // error handling for fat_get(EOChain) or empty
 	return fat_fs->fat[clst - 1];
 }
 
@@ -230,11 +234,17 @@ fat_get (cluster_t clst) {
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	return fat_fs->data_start + (clst - 1) * SECTORS_PER_CLUSTER + 1;
+	ASSERT(clst >= 1);
+
+	// clst 1 -> sector 158 (fat_fs->data_start)
+	return fat_fs->data_start + (clst - 1) * SECTORS_PER_CLUSTER;
 }
 
 // Prj 4-1 : reverse function for clst_to_sect
 cluster_t 
 sector_to_cluster (disk_sector_t sector) {
-	return (sector + SECTORS_PER_CLUSTER - 1) / SECTORS_PER_CLUSTER - fat_fs->data_start;
+	ASSERT(sector >= fat_fs->data_start);
+
+	// sector 158 -> clst 1
+	return sector - fat_fs->data_start + 1;
 }
