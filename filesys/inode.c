@@ -96,23 +96,24 @@ inode_create (disk_sector_t sector, off_t length) {
 		disk_inode->length = length;
 		disk_inode->magic = INODE_MAGIC;
 		#ifdef EFILESYS
-		cluster_t clst = sector_to_cluster(disk_inode->start);
-		cluster_t newclst = clst;
+		cluster_t clst = sector_to_cluster(disk_inode->start); // #ifdef DBG Q. disk_inode->start 무조건 0아님?
+		cluster_t newclst = clst; // save clst in case of chaining failure
 		int i;
 		for (i = 0; i < sectors; i++){
-			if (i != 0)
-				newclst = fat_create_chain(newclst);
-			if (newclst == 0){
+			// if (i != 0)
+			newclst = fat_create_chain(newclst);
+			if (newclst == 0){ // chain 생성 실패 시 (fails to allocate a new cluster)
 				fat_remove_chain(clst, 0);
 				return success;
 			}
+			if (i == 0) disk_inode->start = cluster_to_sector(newclst); // set start point of the file
 		}
 		disk_write (filesys_disk, sector, disk_inode);
 		if (sectors > 0) {
 			static char zeros[DISK_SECTOR_SIZE];
 			for (i = 0; i < sectors; i++){
-				disk_write (filesys_disk, cluster_to_sector(clst), zeros);
-				clst = fat_get(clst);
+				disk_write (filesys_disk, cluster_to_sector(clst), zeros); // non-contiguous sectors 
+				clst = fat_get(clst); // find next cluster(=sector) in FAT
 			}
 		}
 		success = true;
@@ -217,6 +218,8 @@ inode_remove (struct inode *inode) {
 	ASSERT (inode != NULL);
 	inode->removed = true;
 }
+// #ifdef DBG Q. caller가 'inode->open_cnt == 1'인지 확인하고 호출해야하나?
+// -> remove랑 close랑 별개인 듯. remove 안하고도 close 할수도 있을 것 같은데 (그럼 FAT에 남은 값들은 garbage 아닌가? 관리하는 inode가 사라졌으ㄴ)
 
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
  * Returns the number of bytes actually read, which may be less
@@ -278,6 +281,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	const uint8_t *buffer = buffer_;
 	off_t bytes_written = 0;
 	uint8_t *bounce = NULL;
+	
 	bool grow = false; // extend marker
 	uint8_t *zero = malloc (DISK_SECTOR_SIZE); // buffer for zero padding
 
@@ -288,7 +292,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
 		// Project 4-1 : File growth
 		#ifdef EFILESYS
-			if (sector_idx == -1){
+			while (sector_idx == -1){
 				grow = true; // mark that the extend occured
 				off_t inode_len = inode_length(inode);
 
@@ -297,6 +301,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 				cluster_t newclst = fat_create_chain(endclst);
 				if (newclst == 0){
 					break; //no more space in disk
+					// #ifdef DBG Q. return 안하고, 그냥 있는 공간 가지고 write 진행? 근데 이런 상황은 테스트 안할 것 같기도
 				}
 
 				// Zero padding
@@ -304,17 +309,23 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
 				off_t inode_ofs = inode_len % DISK_SECTOR_SIZE;
 				inode->data.length += DISK_SECTOR_SIZE - inode_ofs; // round up to DISK_SECTOR_SIZE for convinience
+				// #ifdef Q. What if inode_ofs == 0? Unnecessary sector added -> unnecessary가 아님. extend 중이니까! 
 
 				disk_write (filesys_disk, cluster_to_sector(newclst), zero); // zero padding for new cluster
 				if (inode_ofs != 0){
 					disk_read (filesys_disk, cluster_to_sector(endclst), zero);
 					memset (zero + inode_ofs + 1 , 0, DISK_SECTOR_SIZE - inode_ofs);
 					disk_write (filesys_disk, cluster_to_sector(endclst), zero); // zero padding for current cluster
+					/*
+						endclst          newclst (extended)
+					 ---------------     ------------
+					| data  0 0 0 0 | - | 0 0 0 0 0 |
+					 ---------------     -----------
+					        ↑ zero padding here!
+					*/
 				}
 
 				sector_idx = byte_to_sector (inode, offset);
-				if (sector_idx == -1)
-					break; //keep grow
 			}		
 		#endif
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
@@ -348,10 +359,18 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 			else
 				memset (bounce, 0, DISK_SECTOR_SIZE);
 			memcpy (bounce + sector_ofs, buffer + bytes_written, chunk_size);
+
 			#ifdef EFILESYS
-				if (grow == true && size - chunk_size == 0) // last chunk
-					memset (bounce + sector_ofs + chunk_size + 1, 'EOF', 1);
+				// if (grow == true && size - chunk_size == 0) // last chunk
+				// 	memset (bounce + sector_ofs + chunk_size + 1, 'EOF', 1);
+
+				// #ifdef DBG
+				/*
+				inode_write_at에서, extend한 맨 마지막 chunk에 EOF 표시를 해줄 필요가 있나? 
+				그리고 'EOF'는 character가 아니라 memset엔 못쓸텐데, 고쳐야 하는거 맞지?
+				*/
 			#endif
+			
 			disk_write (filesys_disk, sector_idx, bounce); 
 		}
 
@@ -364,6 +383,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		if (grow == true){
 			inode->data.length = offset + size; // correct inode length
 		}
+		// #ifdef DBG Q. 이미 위 file growth 할때 inode->data.length 바꾸고 있잖아. 그리고 offset + size가 length?는 아니지 않나
 	#endif
 	free (bounce);
 	free (zero);
