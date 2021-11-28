@@ -166,8 +166,12 @@ fat_boot_create (void) {
 void
 fat_fs_init (void) {
 	/* TODO: Your code goes here. */
+
+	// Invariant : SECTORS_PER_CLUSTER == 1
+	ASSERT(SECTORS_PER_CLUSTER == 1);
+
 	// how many clusters in the filesystem
-	fat_fs->fat_length = (fat_fs->bs.fat_sectors + SECTORS_PER_CLUSTER - 1) / SECTORS_PER_CLUSTER;
+	fat_fs->fat_length = fat_fs->bs.fat_sectors * DISK_SECTOR_SIZE / sizeof (cluster_t); // ex) 157 sectors * 512 bytes/sector % 4 bytes/cluster = 20096 clusters in FAT
 	// in which sector we can start to store FAT on the disk
 	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
 }
