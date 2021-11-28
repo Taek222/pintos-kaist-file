@@ -26,7 +26,7 @@ struct path{
 
 struct path parse_filepath (const char *name){
 	struct path path;
-	char *buf[30];
+	char *buf[30]; // #ifdef DBG 🚨 이거 로컬 변수라, 함수 끝나면 정보 날라갈 듯.
 	int i = 0;
 
 	char *token, *save_ptr;
@@ -37,7 +37,7 @@ struct path parse_filepath (const char *name){
 		token = strtok_r(NULL, "/", &save_ptr);
 		i++;
 	}
-	path.dirnames = buf;
+	path.dirnames = buf; 
 	path.dircount = i-1;
 	path.filename = buf[i];
 	return path;
@@ -93,20 +93,36 @@ filesys_done (void) {
 bool
 filesys_create (const char *name, off_t initial_size) {
 	lock_acquire(&filesys_lock);
-	#ifdef EFILESYS
-		struct path = parse_filepath(name);
-		struct dir *dir = dir_open(find_subdir(path.dirnames, path.dircount));
-	#endif
+
 	disk_sector_t inode_sector = 0;
 	struct dir *dir = dir_open_root ();
+
+	#ifdef EFILESYS
+	cluster_t clst = fat_create_chain(0);
+	ASSERT(clst >= 1);
+	inode_sector = cluster_to_sector(clst);
+
+	bool success = (dir != NULL			
+			&& inode_create (inode_sector, initial_size)
+			&& dir_add (dir, name, inode_sector));
+
+	if (!success)
+		fat_remove_chain (inode_sector, 0);
+
+	// struct path path = parse_filepath(name);
+	// struct dir *dir = dir_open(find_subdir(path.dirnames, path.dircount));
+
+	// create?
+	#else
 	bool success = (dir != NULL
 			&& free_map_allocate (1, &inode_sector)
 			&& inode_create (inode_sector, initial_size)
 			&& dir_add (dir, name, inode_sector));
 	if (!success && inode_sector != 0)
 		free_map_release (inode_sector, 1);
-	dir_close (dir);
+	#endif
 
+	dir_close (dir);
 	lock_release(&filesys_lock);
 
 	return success;
@@ -160,6 +176,8 @@ do_format (void) {
 #ifdef EFILESYS
 	/* Create FAT and save it to the disk. */
 	fat_create ();
+	if (!dir_create (ROOT_DIR_SECTOR, 16)) // #ifdef DBG 16 files limit? get rid of it?
+		PANIC ("root directory creation failed");
 	fat_close ();
 #else
 	free_map_create ();
