@@ -20,9 +20,10 @@ struct path{
 	char * filename; //
 };
 
-struct path parse_filepath (const char *name){
-	struct path path;
-	char *buf[30]; // #ifdef DBG 🚨 이거 로컬 변수라, 함수 끝나면 정보 날라갈 듯.
+struct path* parse_filepath (const char *name){
+	const int MAX_PATH_CNT = 30;
+	struct path* path = malloc(sizeof(struct path));
+	char *buf[MAX_PATH_CNT] = calloc(sizeof(char *), MAX_PATH_CNT); // #ifdef DBG 🚨 로컬 변수 -> 함수 끝나면 정보 날라감; 메모리 할당해주기!
 	int i = 0;
 
 	char *token, *save_ptr;
@@ -33,9 +34,9 @@ struct path parse_filepath (const char *name){
 		token = strtok_r(NULL, "/", &save_ptr);
 		i++;
 	}
-	path.dirnames = buf; 
-	path.dircount = i-1;
-	path.filename = buf[i];
+	path->dirnames = buf; 
+	path->dircount = i-1;
+	path->filename = buf[i];
 	return path;
 }
 
@@ -172,7 +173,7 @@ do_format (void) {
 #ifdef EFILESYS
 	/* Create FAT and save it to the disk. */
 	fat_create ();
-	//fat_put(ROOT_DIR_CLUSTER, 0);
+	// fat_put(ROOT_DIR_CLUSTER, EOChain); // done in 'fat_create'
 	if (!dir_create (cluster_to_sector(ROOT_DIR_CLUSTER), DISK_SECTOR_SIZE/sizeof (struct dir_entry))) // file number limit
 		PANIC ("root directory creation failed");
 	fat_close ();
