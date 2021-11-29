@@ -15,6 +15,10 @@
 #include "intrinsic.h"
 #include "vm/vm.h"
 
+#include "filesys/directory.h"
+#include "filesys/fat.h"
+
+
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 
@@ -39,6 +43,15 @@ void close(int fd);
 int dup2(int oldfd, int newfd);
 void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
 void munmap (void *addr);
+
+// Project 4-2. Subdirectory
+bool chdir (const char *dir);
+bool mkdir (const char *dir);
+bool readdir (int fd, char* name);
+bool isdir (int fd);
+int inumber (int fd);
+int symlink (const char* target, const char* linkpath);
+
 
 //#define DEBUG
 
@@ -134,6 +147,24 @@ void syscall_handler(struct intr_frame *f)
 		break;
 	case SYS_MUNMAP:
 		munmap(f->R.rdi);
+		break;
+	case SYS_CHDIR:
+		f->R.rax = chdir(f->R.rdi);
+		break;
+	case SYS_MKDIR:
+		f->R.rax = mkdir(f->R.rdi);
+		break;
+	case SYS_READDIR:
+		f->R.rax = readdir(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_ISDIR:
+		f->R.rax = isdir(f->R.rdi);
+		break;
+	case SYS_INUMBER:
+		f->R.rax = inumber(f->R.rdi);
+		break;
+	case SYS_SYMLINK:
+		f->R.rax = symlink(f->R.rdi, f->R.rsi);
 		break;
 	default:
 		printf("(syscall_handler) Invalid syscall\n");
@@ -499,4 +530,46 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset){
 // Project 3-3 mmap
 void munmap (void *addr){
 	do_munmap(addr);
+}
+
+
+// Project 4-2. Subdirectory
+bool
+chdir (const char *dir) {
+	return false;
+}
+
+
+bool mkdir (const char *dir){
+	struct path* path = parse_filepath(dir);
+	struct inode* dir_inode = find_subdir(path->dirnames, path->dircount);
+
+	if(dir_inode == NULL) return false;
+
+	struct dir * dir = dir_open(dir_inode);
+
+	// create new directory named 'path->filename'
+	cluster_t clst = fat_create_chain(0);
+	bool res = dir_add(dir, path->filename, cluster_to_sector(clst));
+	return res;
+}
+
+bool
+readdir (int fd, char* name) {
+	return false;
+}
+
+bool
+isdir (int fd) {
+	return false;
+}
+
+int
+inumber (int fd) {
+	return 0;
+}
+
+int
+symlink (const char* target, const char* linkpath) {
+	return 0;
 }
