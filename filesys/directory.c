@@ -15,6 +15,7 @@ struct dir {
 	off_t pos;                          /* Current position. */ // dir_readdir에서 사용; 어느 entry까지 읽었나
 };
 
+// in directory.h
 // /* A single directory entry. */
 // struct dir_entry {
 // 	disk_sector_t inode_sector;         /* Sector number of header. */
@@ -27,19 +28,26 @@ struct dir {
 struct dir *current_directory(){
 	return thread_current()->wd;
 }
-// // find subdirectory's inode
-// struct inode *find_subdir(char ** dirnames, int dircount){
-// 	int i;
-// 	struct inode *inode = NULL;
-// 	struct dir *subdir = dir_lookup(current_directory, dirnames[0], &inode); // 🚨 #ifdef mismatch
-// 	for(i = 1; i <= dircount; i++){
-// 		struct dir *olddir = subdir;
-// 		dir_lookup(olddir, dirnames[i], &inode);
-// 		subdir = dir_open(inode);
-// 		dir_close(olddir);
-// 	}
-// 	return dir_get_inode(subdir);
-// }
+
+// find subdirectory's inode
+struct inode *find_subdir(char ** dirnames, int dircount){
+	int i;
+	struct inode *inode = NULL; // inode of subdirectory or file
+	dir_lookup(current_directory, dirnames[0], &inode);
+	if (inode == NULL) return NULL;
+
+	struct dir *subdir = dir_open(inode);
+	for(i = 1; i <= dircount; i++){
+		struct dir *olddir = subdir;
+		dir_lookup(olddir, dirnames[i], &inode);
+		
+		ASSERT(inode != NULL);
+		
+		subdir = dir_open(inode);
+		dir_close(olddir);
+	}
+	return dir_get_inode(subdir);
+}
 
 /* Creates a directory with space for ENTRY_CNT entries in the
  * given SECTOR.  Returns true if successful, false on failure. */
