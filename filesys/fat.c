@@ -216,7 +216,7 @@ fat_put (cluster_t clst, cluster_t val) {
 	/* TODO: Your code goes here. */
 	ASSERT(clst >= 1);
 	if(!bitmap_test(fat_bitmap, clst - 1)) bitmap_mark(fat_bitmap, clst - 1);
-	fat_fs->fat[clst - 1] = val - 1;
+	fat_fs->fat[clst - 1] = val;
 }
 
 /* Fetch a value in the FAT table. */

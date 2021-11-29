@@ -111,6 +111,7 @@ inode_create (disk_sector_t sector, off_t length) {
 			newclst = fat_create_chain(newclst);
 			if (newclst == 0){ // chain 생성 실패 시 (fails to allocate a new cluster)
 				fat_remove_chain(clst, 0);
+				free(disk_inode);
 				return false;
 			}
 			if (i == 0){
