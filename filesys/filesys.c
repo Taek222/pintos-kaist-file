@@ -14,17 +14,21 @@ struct disk *filesys_disk;
 static void do_format (void);
 
 // Project 4-2 : fime path parsing
-struct path{
-	char ** dirnames; //list of directories
-	int dircount; //level of directory
-	char * filename; //
-};
+
+// defined in filesys.h
+// struct path{
+// 	char ** dirnames; //list of directories
+// 	int dircount; //level of directory
+// 	char * filename; //
+// };
 
 struct path* parse_filepath (const char *name){
 	const int MAX_PATH_CNT = 30;
 	struct path* path = malloc(sizeof(struct path));
-	char *buf[MAX_PATH_CNT] = calloc(sizeof(char *), MAX_PATH_CNT); // #ifdef DBG 🚨 로컬 변수 -> 함수 끝나면 정보 날라감; 메모리 할당해주기!
+	char **buf = calloc(sizeof(char *), MAX_PATH_CNT); // #ifdef DBG 🚨 로컬 변수 -> 함수 끝나면 정보 날라감; 메모리 할당해주기!
 	int i = 0;
+
+	// char *buf[MAX_PATH_CNT]
 
 	char *token, *save_ptr;
 	token = strtok_r(name, "/", &save_ptr);

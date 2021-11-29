@@ -21,4 +21,13 @@ bool filesys_remove (const char *name);
 // Project 3. (parallel-merge)
 struct lock filesys_lock; // prevent child from opening a file when system is already taking care of parent's disk operations 
 
+// Project 4-2. Subdirectory
+struct path{
+	char ** dirnames; //list of directories
+	int dircount; //level of directory
+	char * filename; //
+};
+
+struct path* parse_filepath (const char *name);
+
 #endif /* filesys/filesys.h */

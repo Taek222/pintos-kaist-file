@@ -29,19 +29,18 @@ struct dir *current_directory(){
 	return thread_current()->wd;
 }
 
-// find subdirectory's inode
+// find subdirectory that contains last file/subdirectory in the path
+// ex) a/b/c/d/e -> returns inode (dir_entry table) of directory 'd'
+// returns NULL if path is invalid (ex. some subdirectory missing - a/b/c/d/e 중 c가 없다거나)
 struct inode *find_subdir(char ** dirnames, int dircount){
 	int i;
 	struct inode *inode = NULL; // inode of subdirectory or file
-	dir_lookup(current_directory, dirnames[0], &inode);
-	if (inode == NULL) return NULL;
-
-	struct dir *subdir = dir_open(inode);
-	for(i = 1; i <= dircount; i++){
+	struct dir *subdir = current_directory();
+	for(i = 0; i < dircount; i++){
 		struct dir *olddir = subdir;
 		dir_lookup(olddir, dirnames[i], &inode);
 		
-		ASSERT(inode != NULL);
+		if(inode == NULL) return NULL;
 		
 		subdir = dir_open(inode);
 		dir_close(olddir);
