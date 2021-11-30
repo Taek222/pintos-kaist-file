@@ -40,7 +40,7 @@ struct path* parse_filepath (const char *name){
 	}
 	path->dirnames = buf; 
 	path->dircount = i-1;
-	path->filename = i == 1 ? buf[0] : buf[i]; // name = "a" 같은 경우, buf[0]이 filename
+	path->filename = buf[i-1]; // last name in the path
 	return path;
 }
 
@@ -95,8 +95,13 @@ bool
 filesys_create (const char *name, off_t initial_size) {
 	lock_acquire(&filesys_lock);
 
+	// Parse path and get directory
+	struct path* path = parse_filepath(name);
+	struct dir* dir = find_subdir(path->dirnames, path->dircount);
+	if(dir == NULL) return false;
+
 	disk_sector_t inode_sector = 0;
-	struct dir *dir = dir_open_root ();
+	// struct dir *dir = dir_open_root ();
 
 	#ifdef EFILESYS
 	cluster_t clst = fat_create_chain(0);
@@ -105,7 +110,7 @@ filesys_create (const char *name, off_t initial_size) {
 
 	bool success = (dir != NULL			
 			&& inode_create (inode_sector, initial_size)
-			&& dir_add (dir, name, inode_sector));
+			&& dir_add (dir, path->filename, inode_sector));
 
 	if (!success)
 		fat_remove_chain (inode_sector, 0);
@@ -138,7 +143,12 @@ struct file *
 filesys_open (const char *name) {
 	lock_acquire(&filesys_lock);
 
-	struct dir *dir = dir_open_root ();
+	// Parse path and get directory
+	struct path* path = parse_filepath(name);
+	struct dir* dir = find_subdir(path->dirnames, path->dircount);
+	if(dir == NULL) return false;
+
+	// struct dir *dir = dir_open_root ();
 	struct inode *inode = NULL;
 
 	if (dir != NULL)
@@ -160,7 +170,12 @@ bool
 filesys_remove (const char *name) {
 	lock_acquire(&filesys_lock);
 
-	struct dir *dir = dir_open_root ();
+	// Parse path and get directory
+	struct path* path = parse_filepath(name);
+	struct dir* dir = find_subdir(path->dirnames, path->dircount);
+	if(dir == NULL) return false;
+
+	// struct dir *dir = dir_open_root ();
 	bool success = dir != NULL && dir_remove (dir, name);
 	dir_close (dir);
 
