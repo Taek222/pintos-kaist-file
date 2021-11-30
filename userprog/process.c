@@ -89,6 +89,9 @@ initd(void *f_name)
 	supplemental_page_table_init(&thread_current()->spt);
 #endif
 
+	// Project 4-2. Subdirectory
+	set_current_directory(dir_open_root ());
+
 	if (process_exec(f_name) < 0)
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED();
@@ -301,6 +304,12 @@ __do_fork(void *aux)
 #ifdef DEBUG
 	printf("[do_fork] %s Ready to switch!\n", current->name);
 #endif
+
+	// Project 4-2. Subdirectory
+	// Fork parent's wd
+	ASSERT(parent->wd != NULL);
+	// current->wd = parent->wd; // parent->wd inode 바뀌면 current->wd도 영향 받음
+	current->wd = dir_reopen(parent->wd); // set_current_directory
 
 	// child loaded successfully, wake up parent in process_fork
 	sema_up(&current->fork_sema);
