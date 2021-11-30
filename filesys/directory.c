@@ -34,11 +34,22 @@ struct dir *current_directory(){
 // returns NULL if path is invalid (ex. some subdirectory missing - a/b/c/d/e 중 c가 없다거나)
 struct inode *find_subdir(char ** dirnames, int dircount){
 	int i;
+	struct inode *inode_even = NULL; 
+	struct inode *inode_odd = NULL;
 	struct inode *inode = NULL; // inode of subdirectory or file
 	struct dir *subdir = current_directory();
 	for(i = 0; i < dircount; i++){
 		struct dir *olddir = subdir;
-		dir_lookup(olddir, dirnames[i], &inode);
+		if (i % 2 == 0) 
+		{
+			dir_lookup(olddir, dirnames[i], &inode_even);
+			inode = inode_even;
+		}
+		else 
+		{
+			dir_lookup(olddir, dirnames[i], &inode_odd);
+			inode = inode_odd;
+		}
 		
 		if(inode == NULL) return NULL;
 		

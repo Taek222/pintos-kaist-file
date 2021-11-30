@@ -550,7 +550,10 @@ bool mkdir (const char *dir){
 
 	// create new directory named 'path->filename'
 	cluster_t clst = fat_create_chain(0);
+	dir_create(cluster_to_sector(clst), DISK_SECTOR_SIZE/sizeof(struct dir_entry)); //실제 directory obj 생성
 	bool res = dir_add(dir, path->filename, cluster_to_sector(clst));
+
+	dir_close(dir); //아마 중복으로 여는거 방지하려면 매번 close해줘야할듯
 	return res;
 }
 
