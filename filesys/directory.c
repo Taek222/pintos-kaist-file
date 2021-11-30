@@ -41,7 +41,7 @@ struct dir *find_subdir(char ** dirnames, int dircount){
 	struct inode *inode_even = NULL; 
 	struct inode *inode_odd = NULL;
 	struct inode *inode = NULL; // inode of subdirectory or file
-	struct dir *subdir = current_directory();
+	struct dir *subdir = dir_reopen(current_directory()); // prevent working directory from being closed
 	for(i = 0; i < dircount; i++){
 		struct dir *olddir = subdir;
 		if (i % 2 == 0) 

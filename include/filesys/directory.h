@@ -41,5 +41,6 @@ bool dir_readdir (struct dir *, char name[NAME_MAX + 1]);
 // Project 4-2
 struct dir *find_subdir(char ** dirnames, int dircount);
 struct dir *current_directory();
+void set_current_directory(struct dir *dir);
 
 #endif /* filesys/directory.h */

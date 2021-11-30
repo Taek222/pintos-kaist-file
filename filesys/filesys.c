@@ -40,7 +40,7 @@ struct path* parse_filepath (const char *name){
 	}
 	path->dirnames = buf; 
 	path->dircount = i-1;
-	path->filename = buf[i];
+	path->filename = i == 1 ? buf[0] : buf[i]; // name = "a" 같은 경우, buf[0]이 filename
 	return path;
 }
 
