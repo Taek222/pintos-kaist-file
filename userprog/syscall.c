@@ -45,8 +45,8 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
 void munmap (void *addr);
 
 // Project 4-2. Subdirectory
-bool chdir (const char *dir);
-bool mkdir (const char *dir);
+bool chdir (const char *dir_input);
+bool mkdir (const char *dir_input);
 bool readdir (int fd, char* name);
 bool isdir (int fd);
 int inumber (int fd);
@@ -535,25 +535,34 @@ void munmap (void *addr){
 
 // Project 4-2. Subdirectory
 bool
-chdir (const char *dir) {
-	return false;
+chdir (const char *dir_input) {
+	struct path* path = parse_filepath(dir_input);
+	struct dir* subdir = find_subdir(path->dirnames, path->dircount);
+
+	if(subdir == NULL) return false;	
+
+	struct inode *inode = NULL; // inode of subdirectory or file
+	dir_lookup(subdir, path->filename, &inode);
+
+	if (inode == NULL) return false;
+	set_current_directory(dir_open(inode));
+
+	return true;
 }
 
 
-bool mkdir (const char *dir){
-	struct path* path = parse_filepath(dir);
-	struct inode* dir_inode = find_subdir(path->dirnames, path->dircount);
+bool mkdir (const char *dir_input){
+	struct path* path = parse_filepath(dir_input);
+	struct dir* subdir = find_subdir(path->dirnames, path->dircount);
 
-	if(dir_inode == NULL) return false;
-
-	struct dir * dir = dir_open(dir_inode);
+	if(subdir == NULL) return false;
 
 	// create new directory named 'path->filename'
 	cluster_t clst = fat_create_chain(0);
 	dir_create(cluster_to_sector(clst), DISK_SECTOR_SIZE/sizeof(struct dir_entry)); //실제 directory obj 생성
-	bool res = dir_add(dir, path->filename, cluster_to_sector(clst));
+	bool res = dir_add(subdir, path->filename, cluster_to_sector(clst));
 
-	dir_close(dir); //아마 중복으로 여는거 방지하려면 매번 close해줘야할듯
+	dir_close(subdir); //아마 중복으로 여는거 방지하려면 매번 close해줘야할듯
 	return res;
 }
 

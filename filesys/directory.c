@@ -29,10 +29,14 @@ struct dir *current_directory(){
 	return thread_current()->wd;
 }
 
+void set_current_directory(struct dir *dir){
+	thread_current()->wd = dir;
+}
+
 // find subdirectory that contains last file/subdirectory in the path
 // ex) a/b/c/d/e -> returns inode (dir_entry table) of directory 'd'
 // returns NULL if path is invalid (ex. some subdirectory missing - a/b/c/d/e 중 c가 없다거나)
-struct inode *find_subdir(char ** dirnames, int dircount){
+struct dir *find_subdir(char ** dirnames, int dircount){
 	int i;
 	struct inode *inode_even = NULL; 
 	struct inode *inode_odd = NULL;
