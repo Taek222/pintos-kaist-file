@@ -60,7 +60,7 @@ struct dir *find_subdir(char ** dirnames, int dircount){
 		subdir = dir_open(inode);
 		dir_close(olddir);
 	}
-	return dir_get_inode(subdir);
+	return subdir;
 }
 
 /* Creates a directory with space for ENTRY_CNT entries in the
