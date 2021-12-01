@@ -109,7 +109,7 @@ filesys_create (const char *name, off_t initial_size) {
 	inode_sector = cluster_to_sector(clst);
 
 	bool success = (dir != NULL			
-			&& inode_create (inode_sector, initial_size)
+			&& inode_create (inode_sector, initial_size, false)
 			&& dir_add (dir, path->filename, inode_sector));
 
 	if (!success)
@@ -122,7 +122,7 @@ filesys_create (const char *name, off_t initial_size) {
 	#else
 	bool success = (dir != NULL
 			&& free_map_allocate (1, &inode_sector)
-			&& inode_create (inode_sector, initial_size)
+			&& inode_create (inode_sector, initial_size, false)
 			&& dir_add (dir, name, inode_sector));
 	if (!success && inode_sector != 0)
 		free_map_release (inode_sector, 1);
@@ -156,6 +156,9 @@ filesys_open (const char *name) {
 	dir_close (dir);
 
 	struct file *file = file_open (inode);
+	if (inode_isdir(inode)){
+		file->isdir = true;
+	}
 	
 	lock_release(&filesys_lock);
 

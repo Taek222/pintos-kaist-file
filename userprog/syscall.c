@@ -427,6 +427,12 @@ void close(int fd)
 	if (fileobj == NULL)
 		return;
 
+	if (fileobj->isdir){
+		remove_file_from_fdt(fd);
+		dir_close((struct dir *)fileobj);
+		return;
+	}
+
 	struct thread *cur = thread_current();
 
 	if (fd == 0 || fileobj == STDIN)
@@ -546,6 +552,7 @@ chdir (const char *dir_input) {
 
 	if (inode == NULL) return false;
 	set_current_directory(dir_open(inode));
+	dir_close(subdir);
 
 	return true;
 }

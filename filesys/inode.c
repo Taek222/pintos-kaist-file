@@ -20,7 +20,9 @@ struct inode_disk {
 	disk_sector_t start;                /* First data sector. */
 	off_t length;                       /* File size in bytes. */
 	unsigned magic;                     /* Magic number. */
-	uint32_t unused[125];               /* Not used. */
+	//project 4-2
+	bool isdir;
+	uint8_t unused [499];				/* Not used. */
 };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -80,7 +82,7 @@ inode_init (void) {
  * Returns true if successful.
  * Returns false if memory or disk allocation fails. */
 bool
-inode_create (disk_sector_t sector, off_t length) {
+inode_create (disk_sector_t sector, off_t length, bool isdir) {
 	struct inode_disk *disk_inode = NULL;
 	bool success = false;
 
@@ -95,6 +97,7 @@ inode_create (disk_sector_t sector, off_t length) {
 		size_t sectors = bytes_to_sectors (length);
 		disk_inode->length = length;
 		disk_inode->magic = INODE_MAGIC;
+		disk_inode->isdir = isdir;
 		#ifdef EFILESYS
 		// cluster_t clst = sector_to_cluster(disk_inode->start); // #ifdef DBG Q. disk_inode->start 무조건 0아님?
 		cluster_t clst = sector_to_cluster(sector); 
@@ -433,4 +436,9 @@ inode_allow_write (struct inode *inode) {
 off_t
 inode_length (const struct inode *inode) {
 	return inode->data.length;
+}
+
+// project 4-2
+bool inode_isdir (struct inode *inode) {
+	return inode->data.isdir;
 }

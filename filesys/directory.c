@@ -13,6 +13,11 @@
 struct dir {
 	struct inode *inode;                /* Backing store. */
 	off_t pos;                          /* Current position. */ // dir_readdir에서 사용; 어느 entry까지 읽었나
+
+	//project 4-2 : for casting between struct file
+	bool deny_write; // not used
+	int dupCount; // not used
+	bool isdir; // marker for dir in fdTable
 };
 
 // in directory.h
@@ -67,7 +72,7 @@ struct dir *find_subdir(char ** dirnames, int dircount){
  * given SECTOR.  Returns true if successful, false on failure. */
 bool
 dir_create (disk_sector_t sector, size_t entry_cnt) {
-	return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+	return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -78,6 +83,10 @@ dir_open (struct inode *inode) {
 	if (inode != NULL && dir != NULL) {
 		dir->inode = inode;
 		dir->pos = 0;
+		
+		dir->deny_write = false;
+		dir->dupCount = 0;
+		dir->isdir = true;
 		return dir;
 	} else {
 		inode_close (inode);
@@ -229,6 +238,16 @@ dir_remove (struct dir *dir, const char *name) {
 	inode = inode_open (e.inode_sector);
 	if (inode == NULL)
 		goto done;
+	//project 4-2 : remove subdirectory
+	if (inode_isdir(inode)){
+		char temp[NAME_MAX + 1];
+		struct dir *tar = dir_open(inode);
+		if (dir_readdir(tar, temp)){ // dir not empty
+			dir_close(tar);
+			goto done;
+		}
+		dir_close(tar);
+	}
 
 	/* Erase directory entry. */
 	e.in_use = false;

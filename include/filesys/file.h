@@ -12,6 +12,8 @@ struct file
 	bool deny_write;	 /* Has file_deny_write() been called? */
 	//project2-extra
 	int dupCount; // how many fds share this file? only really 'close' this file when dupCount == 0
+	//project 4-2
+	bool isdir; // marker for dir in fdTable
 };
 struct inode;
 
