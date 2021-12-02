@@ -17,6 +17,7 @@
 
 #include "filesys/directory.h"
 #include "filesys/fat.h"
+#include "filesys/inode.h"
 
 
 void syscall_entry(void);
@@ -427,7 +428,7 @@ void close(int fd)
 	if (fileobj == NULL)
 		return;
 
-	if (fileobj->isdir){
+	if (inode_isdir(fileobj->inode)){
 		remove_file_from_fdt(fd);
 		dir_close((struct dir *)fileobj);
 		return;
@@ -566,21 +567,33 @@ bool mkdir (const char *dir_input){
 
 	// create new directory named 'path->filename'
 	cluster_t clst = fat_create_chain(0);
-	dir_create(cluster_to_sector(clst), DISK_SECTOR_SIZE/sizeof(struct dir_entry)); //실제 directory obj 생성
-	bool res = dir_add(subdir, path->filename, cluster_to_sector(clst));
+	disk_sector_t sect = cluster_to_sector(clst);
 
+	dir_create(sect, DISK_SECTOR_SIZE/sizeof(struct dir_entry)); //실제 directory obj 생성
+
+	struct dir *dir = dir_open(inode_open(sect));
+	dir_add(dir, ".", sect);
+	dir_add(dir, "..", inode_get_inumber(dir_get_inode(subdir)));
+	dir_close(dir);
+
+	bool res = dir_add(subdir, path->filename, cluster_to_sector(clst));
 	dir_close(subdir); //아마 중복으로 여는거 방지하려면 매번 close해줘야할듯
 	return res;
 }
 
 bool
 readdir (int fd, char* name) {
-	return false;
+	struct file *fileobj = find_file_by_fd(fd);
+	if (inode_isdir(fileobj->inode)){
+		return dir_readdir((struct dir *)fileobj, name);
+	}
+	else return false;
 }
 
 bool
 isdir (int fd) {
-	return false;
+	struct file *fileobj = find_file_by_fd(fd);
+	return inode_isdir(fileobj->inode);
 }
 
 int

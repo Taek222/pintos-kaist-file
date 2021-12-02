@@ -19,8 +19,6 @@ file_open(struct inode *inode)
 
 		// Project2-extra
 		file->dupCount = 0;
-		// project 4-2
-		file->isdir = false;
 
 		return file;
 	}

@@ -156,9 +156,6 @@ filesys_open (const char *name) {
 	dir_close (dir);
 
 	struct file *file = file_open (inode);
-	if (inode_isdir(inode)){
-		file->isdir = true;
-	}
 	
 	lock_release(&filesys_lock);
 

@@ -17,7 +17,6 @@ struct dir {
 	//project 4-2 : for casting between struct file
 	bool deny_write; // not used
 	int dupCount; // not used
-	bool isdir; // marker for dir in fdTable
 };
 
 // in directory.h
@@ -86,7 +85,6 @@ dir_open (struct inode *inode) {
 		
 		dir->deny_write = false;
 		dir->dupCount = 0;
-		dir->isdir = true;
 		return dir;
 	} else {
 		inode_close (inode);
@@ -243,6 +241,7 @@ dir_remove (struct dir *dir, const char *name) {
 		char temp[NAME_MAX + 1];
 		struct dir *tar = dir_open(inode);
 		if (dir_readdir(tar, temp)){ // dir not empty
+			dir->pos -= sizeof(struct dir_entry); // restore original pos.
 			dir_close(tar);
 			goto done;
 		}
@@ -272,7 +271,7 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1]) {
 
 	while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e) {
 		dir->pos += sizeof e;
-		if (e.in_use) {
+		if (e.in_use && (e.name != ".") && (e.name != "..")) {
 			strlcpy (name, e.name, NAME_MAX + 1);
 			return true;
 		}
