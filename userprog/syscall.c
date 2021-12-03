@@ -597,7 +597,9 @@ isdir (int fd) {
 
 int
 inumber (int fd) {
-	return 0;
+	struct file *fileobj = find_file_by_fd(fd);
+	// return ((struct inode*)fileobj->inode)->sector;
+	return fileobj->inode->sector;
 }
 
 int
