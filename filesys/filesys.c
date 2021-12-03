@@ -108,6 +108,9 @@ filesys_create (const char *name, off_t initial_size) {
 	struct dir* dir = find_subdir(path->dirnames, path->dircount);
 	if(dir == NULL) return false;
 
+	if(dir_lookup(dir, path->filename, NULL))
+		return false; // create-exists (trying to create file that already exists)
+
 	disk_sector_t inode_sector = 0;
 	// struct dir *dir = dir_open_root ();
 
