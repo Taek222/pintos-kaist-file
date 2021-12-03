@@ -428,14 +428,9 @@ void close(int fd)
 	if (fileobj == NULL)
 		return;
 
-	if (inode_isdir(fileobj->inode)){
-		remove_file_from_fdt(fd);
-		dir_close((struct dir *)fileobj);
-		return;
-	}
-
 	struct thread *cur = thread_current();
 
+	// fd = 0 : stdin, 1 : stdout - thread.c/thread_create 참고
 	if (fd == 0 || fileobj == STDIN)
 	{
 		cur->stdin_count--;
@@ -449,7 +444,11 @@ void close(int fd)
 	if (fd <= 1 || fileobj <= 2)
 		return;
 
-	if (fileobj->dupCount == 0)
+	if (inode_isdir(fileobj->inode)){
+		remove_file_from_fdt(fd);
+		dir_close((struct dir *)fileobj);
+	}
+	else if (fileobj->dupCount == 0)
 		file_close(fileobj);
 	else
 		fileobj->dupCount--;
