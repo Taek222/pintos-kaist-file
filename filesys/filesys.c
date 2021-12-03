@@ -34,6 +34,12 @@ struct path* parse_filepath (const char *name){
 	token = strtok_r(name, "/", &save_ptr);
 	while (token != NULL)
 	{
+		// File name too long - 'test: create-long.c'
+		if(strlen(token) > NAME_MAX){
+			path->dircount = -1; // invalid path
+			return path;
+		}
+
 		buf[i] = token;
 		token = strtok_r(NULL, "/", &save_ptr);
 		i++;
@@ -97,6 +103,8 @@ filesys_create (const char *name, off_t initial_size) {
 
 	// Parse path and get directory
 	struct path* path = parse_filepath(name);
+	if(path->dircount==-1) return false; // create-empty, create-long
+
 	struct dir* dir = find_subdir(path->dirnames, path->dircount);
 	if(dir == NULL) return false;
 
