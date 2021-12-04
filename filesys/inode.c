@@ -48,7 +48,7 @@ bytes_to_sectors (off_t size) {
 static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) {
 	ASSERT (inode != NULL);
-	if (pos <= inode->data.length){
+	if (pos < inode->data.length){
 		#ifdef EFILESYS
 			cluster_t clst = sector_to_cluster(inode->data.start);
 			for (unsigned i = 0; i < (pos / DISK_SECTOR_SIZE); i++) {
@@ -312,7 +312,11 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	while (sector_idx == -1){
 		grow = true; // mark that the extend occured
 		off_t inode_len = inode_length(inode);
-
+		if(inode_len == 0 && (offset + size) <= DISK_SECTOR_SIZE){
+			inode->data.length += DISK_SECTOR_SIZE;
+			sector_idx = byte_to_sector(inode, offset);
+			break; // first write for single-sector zero-length file - just keep grow marker to extend length at last but do not attach new cluster
+		}
 		// Extending file
 		cluster_t endclst = sector_to_cluster(byte_to_sector(inode, inode_len - 1));
 		cluster_t newclst = fat_create_chain(endclst);
@@ -342,9 +346,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 			*/
 		}
 
-		sector_idx = byte_to_sector (inode, offset);
-
 		inode->data.length += DISK_SECTOR_SIZE; // update file length
+		sector_idx = byte_to_sector (inode, offset);
 	}		
 	#endif
 
@@ -404,7 +407,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	}
 	#ifdef EFILESYS
 		if (grow == true){
-			// inode->data.length = offset + size; // correct inode length
+			inode->data.length = offset; // correct inode length
 		}
 		// #ifdef DBG Q. 이미 위 file growth 할때 inode->data.length 바꾸고 있잖아. 그리고 offset + size가 length?는 아니지 않나
 	#endif
