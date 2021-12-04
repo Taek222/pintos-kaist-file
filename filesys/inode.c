@@ -299,7 +299,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	uint8_t *bounce = NULL;
 	
 	bool grow = false; // extend marker
-	uint8_t *zero = malloc (DISK_SECTOR_SIZE); // buffer for zero padding
+	uint8_t zero[DISK_SECTOR_SIZE]; // buffer for zero padding
 
 	if (inode->deny_write_cnt)
 		return 0;
@@ -412,7 +412,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		// #ifdef DBG Q. 이미 위 file growth 할때 inode->data.length 바꾸고 있잖아. 그리고 offset + size가 length?는 아니지 않나
 	#endif
 	free (bounce);
-	free (zero);
+	// free (zero);
 
 	return bytes_written;
 }
