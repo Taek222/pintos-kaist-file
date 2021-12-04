@@ -414,6 +414,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	free (bounce);
 	// free (zero);
 
+	disk_write (filesys_disk, inode->sector, &inode->data); 
+
 	return bytes_written;
 }
 
