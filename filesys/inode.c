@@ -48,7 +48,7 @@ bytes_to_sectors (off_t size) {
 static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) {
 	ASSERT (inode != NULL);
-	if (pos < inode->data.length){
+	if (pos <= inode->data.length){
 		#ifdef EFILESYS
 			cluster_t clst = sector_to_cluster(inode->data.start);
 			for (unsigned i = 0; i < (pos / DISK_SECTOR_SIZE); i++) {
@@ -106,6 +106,8 @@ inode_create (disk_sector_t sector, off_t length, bool isdir) {
 		// 	printf("(inode_create) FAT already occupied at cluster %d (input sector %d)\n", clst, sector);
 		// 	return false; // FAT already occupied
 		// }
+
+		if(sectors == 0) disk_inode->start = clst;
 
 		int i;
 		for (i = 0; i < sectors; i++){
