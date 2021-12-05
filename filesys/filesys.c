@@ -35,6 +35,11 @@ struct path* parse_filepath (const char *name_original){
 
 	path->pathStart_forFreeing = name; // free this later
 
+	if (name[0] == '/'){ // path from root dir
+		buf[0] = "root";
+		i++;
+	}
+
 	char *token, *save_ptr;
 	token = strtok_r(name, "/", &save_ptr);
 	while (token != NULL)
@@ -108,8 +113,10 @@ filesys_create (const char *name, off_t initial_size) {
 
 	// Parse path and get directory
 	struct path* path = parse_filepath(name);
-	if(path->dircount==-1) return false; // create-empty, create-long
-
+	if(path->dircount==-1) { // create-empty, create-long
+		lock_release(&filesys_lock);
+		return false;
+	}
 	struct dir* dir = find_subdir(path->dirnames, path->dircount);
 	if(dir == NULL) {
 		dir_close (dir);
@@ -177,9 +184,13 @@ filesys_open (const char *name) {
 	if(dir == NULL) {
 		dir_close (dir);
 		free_path(path);
+		lock_release(&filesys_lock);
 		return false;
 	}
-
+	if (path->filename == "root"){ // open "/"
+		lock_release(&filesys_lock);
+		return file_open(inode_open (cluster_to_sector(1)));
+	}
 	// struct dir *dir = dir_open_root ();
 	struct inode *inode = NULL;
 
@@ -209,7 +220,8 @@ filesys_remove (const char *name) {
 	struct dir* dir = find_subdir(path->dirnames, path->dircount);
 	if(dir == NULL) {
 		dir_close (dir);
-		free_path(path);	
+		free_path(path);
+		lock_release(&filesys_lock);	
 		return false;
 	}
 

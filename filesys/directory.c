@@ -48,6 +48,11 @@ struct dir *find_subdir(char ** dirnames, int dircount){
 	struct dir *subdir = dir_reopen(current_directory()); // prevent working directory from being closed
 	for(i = 0; i < dircount; i++){
 		struct dir *olddir = subdir;
+		if (i == 0 && (strcmp(dirnames[i],"root") == 0)){ // path from root dir
+			subdir = dir_open_root();
+			dir_close(olddir);
+			continue;
+		}
 		if (i % 2 == 0) 
 		{
 			dir_lookup(olddir, dirnames[i], &inode_even);

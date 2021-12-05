@@ -312,10 +312,12 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	while (sector_idx == -1){
 		grow = true; // mark that the extend occured
 		off_t inode_len = inode_length(inode);
-		if(inode_len == 0 && (offset + size) <= DISK_SECTOR_SIZE){
-			inode->data.length += DISK_SECTOR_SIZE;
+		if(((offset + size - inode_len) <= DISK_SECTOR_SIZE) && (offset + size) / DISK_SECTOR_SIZE == inode_len / DISK_SECTOR_SIZE){ 
+			// in-sector growth(bytes to be written <= sector size, last byte after write lies within current last sector)
+			off_t inode_ofs = inode_len % DISK_SECTOR_SIZE;
+			inode->data.length += DISK_SECTOR_SIZE - inode_ofs;
 			sector_idx = byte_to_sector(inode, offset);
-			break; // first write for single-sector zero-length file - just keep grow marker to extend length at last but do not attach new cluster
+			break;
 		}
 		// Extending file
 		cluster_t endclst = sector_to_cluster(byte_to_sector(inode, inode_len - 1));
