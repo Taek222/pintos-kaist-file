@@ -22,13 +22,18 @@ static void do_format (void);
 // 	char * filename; //
 // };
 
-struct path* parse_filepath (const char *name){
+struct path* parse_filepath (const char *name_original){
 	const int MAX_PATH_CNT = 30;
 	struct path* path = malloc(sizeof(struct path));
 	char **buf = calloc(sizeof(char *), MAX_PATH_CNT); // #ifdef DBG 🚨 로컬 변수 -> 함수 끝나면 정보 날라감; 메모리 할당해주기!
 	int i = 0;
 
-	// char *buf[MAX_PATH_CNT]
+	int pathLen = strlen(name_original)+1;
+	char* name = malloc(pathLen);
+	strlcpy(name, name_original, pathLen);
+	// printf("pathLen : %d // %s, %d, copied %s %d\n", pathLen, name_original, strlen(name_original), name, strlen(name)); // #ifdef DBG
+
+	path->pathStart_forFreeing = name; // free this later
 
 	char *token, *save_ptr;
 	token = strtok_r(name, "/", &save_ptr);
@@ -106,10 +111,17 @@ filesys_create (const char *name, off_t initial_size) {
 	if(path->dircount==-1) return false; // create-empty, create-long
 
 	struct dir* dir = find_subdir(path->dirnames, path->dircount);
-	if(dir == NULL) return false;
+	if(dir == NULL) {
+		dir_close (dir);
+		free_path(path);
+		lock_release(&filesys_lock);
+		return false;
+	}
 
 	struct inode *inode = NULL; 
 	if(dir_lookup(dir, path->filename, &inode)){
+		dir_close (dir);
+		free_path(path);
 		lock_release(&filesys_lock);
 		return false; // create-exists (trying to create file that already exists)
 	}
@@ -143,7 +155,8 @@ filesys_create (const char *name, off_t initial_size) {
 	#endif
 
 	dir_close (dir);
-	
+	free_path(path);
+
 	lock_release(&filesys_lock);
 
 	return success;
@@ -161,17 +174,23 @@ filesys_open (const char *name) {
 	// Parse path and get directory
 	struct path* path = parse_filepath(name);
 	struct dir* dir = find_subdir(path->dirnames, path->dircount);
-	if(dir == NULL) return false;
+	if(dir == NULL) {
+		dir_close (dir);
+		free_path(path);
+		return false;
+	}
 
 	// struct dir *dir = dir_open_root ();
 	struct inode *inode = NULL;
 
 	if (dir != NULL)
-		dir_lookup (dir, name, &inode);
-	dir_close (dir);
+		dir_lookup (dir, path->filename, &inode);
 
 	struct file *file = file_open (inode);
-	
+
+	dir_close (dir);
+	free_path(path);
+
 	lock_release(&filesys_lock);
 
 	return file;
@@ -188,11 +207,17 @@ filesys_remove (const char *name) {
 	// Parse path and get directory
 	struct path* path = parse_filepath(name);
 	struct dir* dir = find_subdir(path->dirnames, path->dircount);
-	if(dir == NULL) return false;
+	if(dir == NULL) {
+		dir_close (dir);
+		free_path(path);	
+		return false;
+	}
 
 	// struct dir *dir = dir_open_root ();
 	bool success = dir != NULL && dir_remove (dir, name);
+
 	dir_close (dir);
+	free_path(path);
 
 	lock_release(&filesys_lock);
 
@@ -219,4 +244,10 @@ do_format (void) {
 #endif
 
 	printf ("done.\n");
+}
+
+void free_path(struct path* path){
+	free(path->pathStart_forFreeing); // free malloc'ed and copied path
+	free(path->dirnames); // free buf
+	free(path);
 }

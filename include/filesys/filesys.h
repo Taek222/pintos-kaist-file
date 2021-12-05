@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include "filesys/off_t.h"
 #include "threads/synch.h"
+#include "threads/malloc.h"
 
 /* Sectors of system file inodes. */
 #define FREE_MAP_SECTOR 0       /* Free map file inode sector. */
@@ -26,8 +27,9 @@ struct path{
 	char ** dirnames; //list of directories
 	int dircount; //level of directory
 	char * filename; //
+	char * pathStart_forFreeing; // malloc'ed to copy path input argument to `parse_filepath` - must free
 };
 
 struct path* parse_filepath (const char *name);
-
+void free_path(struct path* path);
 #endif /* filesys/filesys.h */

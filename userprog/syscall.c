@@ -552,13 +552,17 @@ chdir (const char *dir_input) {
 
 	if (inode == NULL) return false;
 	set_current_directory(dir_open(inode));
-	dir_close(subdir);
+
+	dir_close (subdir);
+	free_path(path);
 
 	return true;
 }
 
 
 bool mkdir (const char *dir_input){
+	if(strlen(dir_input) == 0) return false;
+
 	struct path* path = parse_filepath(dir_input);
 	struct dir* subdir = find_subdir(path->dirnames, path->dircount);
 
@@ -576,7 +580,10 @@ bool mkdir (const char *dir_input){
 	dir_close(dir);
 
 	bool res = dir_add(subdir, path->filename, cluster_to_sector(clst));
-	dir_close(subdir); //아마 중복으로 여는거 방지하려면 매번 close해줘야할듯
+
+	dir_close (subdir); //아마 중복으로 여는거 방지하려면 매번 close해줘야할듯
+	free_path(path);
+
 	return res;
 }
 
