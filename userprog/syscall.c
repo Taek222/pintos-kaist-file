@@ -368,7 +368,7 @@ int write(int fd, const void *buffer, unsigned size)
 	int ret;
 
 	struct file *fileobj = find_file_by_fd(fd);
-	if (fileobj == NULL || inode_isdir(fileobj->inode))
+	if (fileobj == NULL)
 		return -1;
 
 	struct thread *cur = thread_current();
@@ -394,6 +394,9 @@ int write(int fd, const void *buffer, unsigned size)
 	}
 	else
 	{
+		if (inode_isdir(fileobj->inode)){
+			return -1;
+		}
 		lock_acquire(&file_rw_lock);
 		ret = file_write(fileobj, buffer, size);
 		lock_release(&file_rw_lock);
