@@ -550,6 +550,13 @@ chdir (const char *dir_input) {
 
 	if(subdir == NULL) return false;	
 
+	if (!strcmp(path->filename, "root")){
+		set_current_directory(dir_open_root());
+		dir_close(subdir);
+		free_path(path);
+		return true;
+	}
+
 	struct inode *inode = NULL; // inode of subdirectory or file
 	dir_lookup(subdir, path->filename, &inode);
 
