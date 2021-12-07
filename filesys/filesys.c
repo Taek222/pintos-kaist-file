@@ -180,12 +180,16 @@ filesys_open (const char *name) {
 
 	// Parse path and get directory
 	struct path* path = parse_filepath(name);
+	if(path->dircount==-1) { // open-empty
+		lock_release(&filesys_lock);
+		return NULL;
+	}
 	struct dir* dir = find_subdir(path->dirnames, path->dircount);
 	if(dir == NULL) {
 		dir_close (dir);
 		free_path(path);
 		lock_release(&filesys_lock);
-		return false;
+		return NULL;
 	}
 	if (path->filename == "root"){ // open "/"
 		lock_release(&filesys_lock);
@@ -217,6 +221,10 @@ filesys_remove (const char *name) {
 
 	// Parse path and get directory
 	struct path* path = parse_filepath(name);
+	if(path->dircount==-1) {
+		lock_release(&filesys_lock);
+		return false;
+	}
 	struct dir* dir = find_subdir(path->dirnames, path->dircount);
 	if(dir == NULL) {
 		dir_close (dir);
@@ -225,9 +233,16 @@ filesys_remove (const char *name) {
 		return false;
 	}
 
+	// Check if the target is open (dir-rm-cwd)
+	struct inode *inode = NULL; 
+	dir_lookup(dir, path->filename, &inode);
+	if(inode->open_cnt) 
+		goto done;
+
 	// struct dir *dir = dir_open_root ();
 	bool success = dir != NULL && dir_remove (dir, name);
 
+done:
 	dir_close (dir);
 	free_path(path);
 

@@ -201,7 +201,7 @@ fat_create_chain (cluster_t clst) {
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
-	while(clst != EOChain){
+	while(clst && clst != EOChain){
 		bitmap_set(fat_bitmap, clst - 1, false);
 		clst = fat_get(clst);
 	}
