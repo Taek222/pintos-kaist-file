@@ -636,6 +636,7 @@ inumber (int fd) {
 
 int
 symlink (const char* target, const char* linkpath) {
+	bool lazy = false;
 	//parse link path
 	struct path* path_link = parse_filepath(linkpath);
 	if(path_link->dircount==-1) {
@@ -664,16 +665,17 @@ symlink (const char* target, const char* linkpath) {
 	struct inode* inode = NULL;
 	dir_lookup(subdir_tar, path_tar->filename, &inode);
 	if(inode == NULL) {
-		dir_close (subdir_link);
-		free_path(path_link);
-		dir_close (subdir_tar);
-		free_path(path_tar);
-		return -1;
+		//lazy symlink(target not created yet)
+		inode = dir_get_inode(subdir_tar);
+		lazy = true;
 	}
 
 	//add to link path
 	dir_add(subdir_link, path_link->filename, inode_get_inumber(inode));
 	set_entry_symlink(subdir_link, path_link->filename, true);
+	if (lazy){
+		set_entry_lazytar(subdir_link, path_link->filename, path_tar->filename);
+	}
 
 	dir_close (subdir_link);
 	free_path(path_link);

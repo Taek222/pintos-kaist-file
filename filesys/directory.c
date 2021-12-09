@@ -165,8 +165,16 @@ dir_lookup (const struct dir *dir, const char *name,
 	ASSERT (dir != NULL);
 	ASSERT (name != NULL);
 
-	if (lookup (dir, name, &e, NULL))
+	if (lookup (dir, name, &e, NULL)){
+		if (strcmp("lazy", e.lazy)) //lazy symlink update
+		{
+			dir_lookup(dir_open(inode_open(e.inode_sector)), e.lazy, inode);
+			e.inode_sector = inode_get_inumber(*inode);
+			strlcpy (e.lazy, "lazy", sizeof e.lazy);
+			return *inode != NULL;
+		}
 		*inode = inode_open (e.inode_sector);
+	}
 	else
 		*inode = NULL;
 
@@ -213,6 +221,7 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) {
 	/* Write slot. */
 	e.in_use = true;
 	e.is_sym = false;
+	strlcpy (e.lazy, "lazy", sizeof e.lazy);
 	strlcpy (e.name, name, sizeof e.name);
 	e.inode_sector = inode_sector;
 	success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
@@ -298,4 +307,11 @@ void set_entry_symlink(struct dir* dir, const char *name, bool issym){
 	off_t ofs;
 	lookup(dir, name, &e, &ofs);
 	e.is_sym = issym;
+}
+// set dir entry's lazy symlink target info
+void set_entry_lazytar(struct dir* dir, const char *name, const char *tar){
+	struct dir_entry e;
+	off_t ofs;
+	lookup(dir, name, &e, &ofs);
+	strlcpy(e.lazy, tar, sizeof e.lazy);
 }

@@ -24,6 +24,7 @@ struct dir_entry {
 	bool in_use;                        /* In use or free? */
 	//project 4-2
 	bool is_sym;						/* is symlink or not? */
+	char lazy[NAME_MAX + 1];			/* for lazy link */
 };
 
 /* Opening and closing directories. */
@@ -45,5 +46,6 @@ struct dir *find_subdir(char ** dirnames, int dircount);
 struct dir *current_directory();
 void set_current_directory(struct dir *dir);
 void set_entry_symlink(struct dir*, const char *name, bool);
+void set_entry_lazytar(struct dir*, const char *name, const char *tar);
 
 #endif /* filesys/directory.h */
