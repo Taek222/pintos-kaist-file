@@ -13,6 +13,8 @@
 #include "tests/lib.h"
 #include "tests/main.h"
 
+#define DBG2
+
 void
 test_main (void) 
 {
@@ -24,10 +26,22 @@ test_main (void)
   CHECK (chdir ("start"), "chdir \"start\"");
   for (i = 0; ; i++) 
     {
+
+      #ifdef DBG
+      printf("Trial %d\n", i); 
+      
+      if(i==940 || i==1254) 
+        symlink("","");
+      #endif
+
       char name[3][READDIR_MAX_LEN + 1];
       char file_name[16], dir_name[16];
       char contents[128];
       int fd;
+
+      #ifdef DBG
+      printf("Create file\n", i); 
+      #endif
 
       /* Create file. */
       snprintf (file_name, sizeof file_name, "file%d", i);
@@ -43,6 +57,10 @@ test_main (void)
         }
       close (fd);
       
+      #ifdef DBG
+      printf("Create directory\n", i); 
+      #endif
+
       /* Create directory. */
       snprintf (dir_name, sizeof dir_name, "dir%d", i);
       if (!mkdir (dir_name)) 
@@ -50,6 +68,10 @@ test_main (void)
           CHECK (remove (file_name), "remove \"%s\"", file_name);
           break; 
         }
+
+      #ifdef DBG
+      printf("Check for file and directory\n", i); 
+      #endif
 
       /* Check for file and directory. */
       CHECK ((fd = open (".")) > 1, "open \".\"");
@@ -63,6 +85,10 @@ test_main (void)
              file_name, dir_name, name[0], name[1]);
       close (fd);
 
+      #ifdef DBG
+      printf("Descend into directory\n", i); 
+      #endif
+
       /* Descend into directory. */
       CHECK (chdir (dir_name), "chdir \"%s\"", dir_name);
     }
@@ -71,6 +97,12 @@ test_main (void)
 
   msg ("removing all but top 10 levels of files and directories...");
   quiet = true;
+
+  #ifdef DBG2
+  printf("End at Trial %d\n", i);   
+  symlink("","");
+  #endif
+
   while (i-- > 10) 
     {
       char file_name[16], dir_name[16];
