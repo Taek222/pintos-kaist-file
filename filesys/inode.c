@@ -305,23 +305,26 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		return 0;
 
 	/* Sector to write, starting byte offset within sector. */
-	disk_sector_t sector_idx = byte_to_sector (inode, offset);
+	// check if there is enough memory for writing 'size' from 'offset'
+	disk_sector_t sector_idx = byte_to_sector (inode, offset + size);
 
 	// Project 4-1 : File growth
 	#ifdef EFILESYS
 	while (sector_idx == -1){
 		grow = true; // mark that the extend occured
 		off_t inode_len = inode_length(inode);
-		if(((offset + size - inode_len) <= DISK_SECTOR_SIZE) && (offset + size) / DISK_SECTOR_SIZE == inode_len / DISK_SECTOR_SIZE){ 
-			// in-sector growth(bytes to be written <= sector size, last byte after write lies within current last sector)
-			off_t inode_ofs = inode_len % DISK_SECTOR_SIZE;
-			inode->data.length += DISK_SECTOR_SIZE - inode_ofs;
-			sector_idx = byte_to_sector(inode, offset);
-			break;
-		}
+
+		// if(((offset + size - inode_len) <= DISK_SECTOR_SIZE) && (offset + size) / DISK_SECTOR_SIZE == inode_len / DISK_SECTOR_SIZE){ 
+		// 	// in-sector growth(bytes to be written <= sector size, last byte after write lies within current last sector)
+		// 	off_t inode_ofs = inode_len % DISK_SECTOR_SIZE;
+		// 	inode->data.length += DISK_SECTOR_SIZE - inode_ofs;
+		// 	// sector_idx = byte_to_sector(inode, offset + size);
+		// 	break;
+		// }
+		
 		// Extending file
 		cluster_t endclst = sector_to_cluster(byte_to_sector(inode, inode_len - 1));
-		cluster_t newclst = fat_create_chain(endclst);
+		cluster_t newclst = inode_len == 0 ? endclst : fat_create_chain(endclst);
 		if (newclst == 0){
 			break; //no more space in disk
 			// #ifdef DBG Q. return 안하고, 그냥 있는 공간 가지고 write 진행? 근데 이런 상황은 테스트 안할 것 같기도
@@ -331,7 +334,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		memset (zero, 0, DISK_SECTOR_SIZE);
 
 		off_t inode_ofs = inode_len % DISK_SECTOR_SIZE;
-		inode->data.length += DISK_SECTOR_SIZE - inode_ofs; // round up to DISK_SECTOR_SIZE for convinience
+		if(inode_ofs != 0)
+			inode->data.length += DISK_SECTOR_SIZE - inode_ofs; // round up to DISK_SECTOR_SIZE for convinience
 		// #ifdef Q. What if inode_ofs == 0? Unnecessary sector added -> unnecessary가 아님. extend 중이니까! 
 
 		disk_write (filesys_disk, cluster_to_sector(newclst), zero); // zero padding for new cluster
@@ -349,9 +353,11 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		}
 
 		inode->data.length += DISK_SECTOR_SIZE; // update file length
-		sector_idx = byte_to_sector (inode, offset);
+		sector_idx = byte_to_sector (inode, offset + size);
 	}		
 	#endif
+
+	sector_idx = byte_to_sector (inode, offset); // start writing from offset
 
 	while (size > 0) {
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
