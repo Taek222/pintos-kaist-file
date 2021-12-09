@@ -596,6 +596,11 @@ bool mkdir (const char *dir_input){
 	cluster_t clst = fat_create_chain(0);
 	disk_sector_t sect = cluster_to_sector(clst);
 
+	// dir-vine) must fail if disk is full
+	// cluster_t isAvailable = fat_create_chain(0);
+	// if(sect >= filesys_disk->capacity)
+	// 	return false;
+
 	dir_create(sect, DISK_SECTOR_SIZE/sizeof(struct dir_entry)); //실제 directory obj 생성
 
 	struct dir *dir = dir_open(inode_open(sect));
