@@ -263,8 +263,12 @@ do_format (void) {
 	/* Create FAT and save it to the disk. */
 	fat_create ();
 	// fat_put(ROOT_DIR_CLUSTER, EOChain); // done in 'fat_create'
-	if (!dir_create (cluster_to_sector(ROOT_DIR_CLUSTER), DISK_SECTOR_SIZE/sizeof (struct dir_entry))) // file number limit
+	disk_sector_t rootsect = cluster_to_sector(ROOT_DIR_CLUSTER);
+	if (!dir_create (rootsect, DISK_SECTOR_SIZE/sizeof (struct dir_entry))) // file number limit
 		PANIC ("root directory creation failed");
+	struct dir* rootdir = dir_open(inode_open(rootsect));
+	dir_add(rootdir, ".", rootsect);
+	dir_close(rootdir);
 	fat_close ();
 #else
 	free_map_create ();

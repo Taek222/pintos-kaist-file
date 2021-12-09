@@ -636,5 +636,47 @@ inumber (int fd) {
 
 int
 symlink (const char* target, const char* linkpath) {
+	//parse link path
+	struct path* path_link = parse_filepath(linkpath);
+	if(path_link->dircount==-1) {
+		return -1;
+	}
+	struct dir* subdir_link = find_subdir(path_link->dirnames, path_link->dircount);
+	if(subdir_link == NULL) {
+		dir_close (subdir_link);
+		free_path(path_link);
+		return -1;
+	}
+
+	//parse target path
+	struct path* path_tar = parse_filepath(target);
+	if(path_tar->dircount==-1) {
+		return -1;
+	}
+	struct dir* subdir_tar = find_subdir(path_tar->dirnames, path_tar->dircount);
+	if(subdir_tar == NULL) {
+		dir_close (subdir_tar);
+		free_path(path_tar);
+		return -1;
+	}
+
+	//find target inode
+	struct inode* inode = NULL;
+	dir_lookup(subdir_tar, path_tar->filename, &inode);
+	if(inode == NULL) {
+		dir_close (subdir_link);
+		free_path(path_link);
+		dir_close (subdir_tar);
+		free_path(path_tar);
+		return -1;
+	}
+
+	//add to link path
+	dir_add(subdir_link, path_link->filename, inode_get_inumber(inode));
+
+	dir_close (subdir_link);
+	free_path(path_link);
+	dir_close (subdir_tar);
+	free_path(path_tar);
 	return 0;
 }
