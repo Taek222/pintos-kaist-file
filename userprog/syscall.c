@@ -673,6 +673,7 @@ symlink (const char* target, const char* linkpath) {
 
 	//add to link path
 	dir_add(subdir_link, path_link->filename, inode_get_inumber(inode));
+	set_entry_symlink(subdir_link, path_link->filename, true);
 
 	dir_close (subdir_link);
 	free_path(path_link);

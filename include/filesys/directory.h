@@ -22,6 +22,8 @@ struct dir_entry {
 	disk_sector_t inode_sector;         /* Sector number of header. */
 	char name[NAME_MAX + 1];            /* Null terminated file name. */
 	bool in_use;                        /* In use or free? */
+	//project 4-2
+	bool is_sym;						/* is symlink or not? */
 };
 
 /* Opening and closing directories. */
@@ -42,5 +44,6 @@ bool dir_readdir (struct dir *, char name[NAME_MAX + 1]);
 struct dir *find_subdir(char ** dirnames, int dircount);
 struct dir *current_directory();
 void set_current_directory(struct dir *dir);
+void set_entry_symlink(struct dir*, const char *name, bool);
 
 #endif /* filesys/directory.h */

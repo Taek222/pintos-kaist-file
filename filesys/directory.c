@@ -212,6 +212,7 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) {
 
 	/* Write slot. */
 	e.in_use = true;
+	e.is_sym = false;
 	strlcpy (e.name, name, sizeof e.name);
 	e.inode_sector = inode_sector;
 	success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
@@ -237,10 +238,17 @@ dir_remove (struct dir *dir, const char *name) {
 	if (!lookup (dir, name, &e, &ofs))
 		goto done;
 
+	//project 4-2 : remove symlink
+	if (e.is_sym){
+		e.in_use = false;
+		return (inode_write_at(dir->inode, &e, sizeof e, ofs) == sizeof e);
+	}
+
 	/* Open inode. */
 	inode = inode_open (e.inode_sector);
 	if (inode == NULL)
 		goto done;
+
 	//project 4-2 : remove subdirectory
 	if (inode_isdir(inode)){
 		char temp[NAME_MAX + 1];
@@ -282,4 +290,12 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1]) {
 		}
 	}
 	return false;
+}
+
+//project 4-2 : set dir entry's issym flag
+void set_entry_symlink(struct dir* dir, const char *name, bool issym){
+	struct dir_entry e;
+	off_t ofs;
+	lookup(dir, name, &e, &ofs);
+	e.is_sym = issym;
 }
