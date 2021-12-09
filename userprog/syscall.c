@@ -546,7 +546,15 @@ void munmap (void *addr){
 bool
 chdir (const char *dir_input) {
 	struct path* path = parse_filepath(dir_input);
+	if(path->dircount==-1) {
+		return false;
+	}
 	struct dir* subdir = find_subdir(path->dirnames, path->dircount);
+	if(subdir == NULL) {
+		dir_close (subdir);
+		free_path(path);
+		return false;
+	}
 
 	if(subdir == NULL) return false;	
 
@@ -574,9 +582,15 @@ bool mkdir (const char *dir_input){
 	if(strlen(dir_input) == 0) return false;
 
 	struct path* path = parse_filepath(dir_input);
+	if(path->dircount==-1) {
+		return false;
+	}
 	struct dir* subdir = find_subdir(path->dirnames, path->dircount);
-
-	if(subdir == NULL) return false;
+	if(subdir == NULL) {
+		dir_close (subdir);
+		free_path(path);
+		return false;
+	}
 
 	// create new directory named 'path->filename'
 	cluster_t clst = fat_create_chain(0);
@@ -590,6 +604,7 @@ bool mkdir (const char *dir_input){
 	dir_close(dir);
 
 	bool res = dir_add(subdir, path->filename, cluster_to_sector(clst));
+	// #ifdef DBG if fail?
 
 	dir_close (subdir); //아마 중복으로 여는거 방지하려면 매번 close해줘야할듯
 	free_path(path);
