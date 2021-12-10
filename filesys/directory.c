@@ -9,15 +9,16 @@
 
 #include "filesys/fat.h"
 
-/* A directory. */
-struct dir {
-	struct inode *inode;                /* Backing store. */
-	off_t pos;                          /* Current position. */ // dir_readdir에서 사용; 어느 entry까지 읽었나
+// moved to directory.h
+// /* A directory. */
+// struct dir {
+// 	struct inode *inode;                /* Backing store. */
+// 	off_t pos;                          /* Current position. */ // dir_readdir에서 사용; 어느 entry까지 읽었나
 
-	//project 4-2 : for casting between struct file
-	bool deny_write; // not used
-	int dupCount; // not used
-};
+// 	//project 4-2 : for casting to 'struct file' (syscall close)
+// 	bool deny_write; // not used
+// 	int dupCount; // not used
+// };
 
 // in directory.h
 // /* A single directory entry. */
@@ -34,6 +35,7 @@ struct dir *current_directory(){
 }
 
 void set_current_directory(struct dir *dir){
+	// dir_close(current_directory());
 	thread_current()->wd = dir;
 }
 
@@ -45,7 +47,10 @@ struct dir *find_subdir(char ** dirnames, int dircount){
 	struct inode *inode_even = NULL; 
 	struct inode *inode_odd = NULL;
 	struct inode *inode = NULL; // inode of subdirectory or file
-	struct dir *subdir = dir_reopen(current_directory()); // prevent working directory from being closed
+
+	struct dir *cwd = current_directory();
+	if (cwd == NULL) return NULL;
+	struct dir *subdir = dir_reopen(cwd); // prevent working directory from being closed
 	for(i = 0; i < dircount; i++){
 		struct dir *olddir = subdir;
 		if (i == 0 && (strcmp(dirnames[i],"root") == 0)){ // path from root dir

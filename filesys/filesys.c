@@ -232,11 +232,16 @@ filesys_remove (const char *name) {
 	// Check if the target is open (dir-rm-cwd)
 	struct inode *inode = NULL; 
 	dir_lookup(dir, path->filename, &inode);
-	if(inode == NULL || (inode_isdir(inode) && inode->open_cnt > 2)){ // only dir can't be closed when open (dir-rm-cwd vs syn-remove)
+	// if(inode == NULL || (inode_isdir(inode) && inode->open_cnt > 2)){ // only dir can't be closed when open (dir-rm-cwd vs syn-remove)
+	if(inode == NULL){ // only dir can't be closed when open (dir-rm-cwd vs syn-remove)
 		goto done;
 	}
 
 	//printf("isDir? %d / openCnt %d\n", inode->data.isdir, inode->open_cnt);
+
+	struct dir *cwd = current_directory();
+	if(cwd->inode == inode)
+		set_current_directory(NULL); 
 
 	// struct dir *dir = dir_open_root ();
 	success = dir != NULL && dir_remove (dir, path->filename);
