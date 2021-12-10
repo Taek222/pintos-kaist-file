@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-//#define DBG_FAT
+#define DBG_FAT
 
 /* Should be less than DISK_SECTOR_SIZE */
 struct fat_boot {
@@ -63,7 +63,13 @@ fat_init (void) {
 		fat_boot_create ();
 	fat_fs_init ();
 
-	// fat_bitmap = bitmap_create(fat_fs->fat_length-1); // #ifdef DBG Q. 0번째는 ROOT_DIR_CLUSTER니까 1로 채워넣어야 하지 않을까?
+	fat_bitmap = bitmap_create(fat_fs->fat_length-1); // #ifdef DBG Q. 0번째는 ROOT_DIR_CLUSTER니까 1로 채워넣어야 하지 않을까?
+	#ifdef DBG_FAT
+	printf("(fat_create) fat len : %d, sector of last FAT entry : %d\n", fat_fs->fat_length, cluster_to_sector(fat_fs->fat_length));
+	#endif
+	#ifdef DBG_FAT
+	printf("(fat_create) create fat_bitmap - fat_len %d, bitmap size %d\n", fat_fs->fat_length, bitmap_size(fat_bitmap));
+	#endif
 }
 
 void
@@ -138,14 +144,14 @@ fat_create (void) {
 	fat_fs_init ();
 
 #ifdef DBG_FAT
-	printf("fat_create) fat len : %d, sector of last FAT entry : %d\n", fat_fs->fat_length, cluster_to_sector(fat_fs->fat_length));
+	//printf("fat_create) fat len : %d, sector of last FAT entry : %d\n", fat_fs->fat_length, cluster_to_sector(fat_fs->fat_length));
 #endif
 
 	// Create bitmap for managing FAT entry status (empty/occupied)
-	fat_bitmap = bitmap_create(fat_fs->fat_length); // #ifdef DBG Q. 0번째는 ROOT_DIR_CLUSTER니까 1로 채워넣어야 하지 않을까?
+	//fat_bitmap = bitmap_create(fat_fs->fat_length); // #ifdef DBG Q. 0번째는 ROOT_DIR_CLUSTER니까 1로 채워넣어야 하지 않을까?
 
 #ifdef DBG_FAT
-	printf("(fat_create) create fat_bitmap - fat_len %d, bitmap size %d\n", fat_fs->fat_length, bitmap_size(fat_bitmap));
+	//printf("(fat_create) create fat_bitmap - fat_len %d, bitmap size %d\n", fat_fs->fat_length, bitmap_size(fat_bitmap));
 #endif
 
 	// Create FAT table
@@ -194,9 +200,10 @@ fat_fs_init (void) {
 
 	// how many clusters in the filesystem
 	// fat_fs->fat_length = fat_fs->bs.fat_sectors * DISK_SECTOR_SIZE / sizeof (cluster_t); // ex) 157 sectors * 512 bytes/sector % 4 bytes/cluster = 20096 clusters in FAT
-	fat_fs->fat_length = sector_to_cluster(fat_fs->bs.total_sectors)-1;
+
 	// in which sector we can start to store FAT on the disk
 	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
+	fat_fs->fat_length = sector_to_cluster(disk_size(filesys_disk))-1;
 
 #ifdef DBG_FAT
 	printf("fat len : %d, sector of last FAT entry : %d\n", fat_fs->fat_length, cluster_to_sector(fat_fs->fat_length));
