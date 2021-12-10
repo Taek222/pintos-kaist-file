@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <string.h>
 
+//#define DBG_FAT
+
 /* Should be less than DISK_SECTOR_SIZE */
 struct fat_boot {
 	unsigned int magic;
@@ -61,7 +63,7 @@ fat_init (void) {
 		fat_boot_create ();
 	fat_fs_init ();
 
-	fat_bitmap = bitmap_create(fat_fs->fat_length); // #ifdef DBG Q. 0번째는 ROOT_DIR_CLUSTER니까 1로 채워넣어야 하지 않을까?
+	// fat_bitmap = bitmap_create(fat_fs->fat_length-1); // #ifdef DBG Q. 0번째는 ROOT_DIR_CLUSTER니까 1로 채워넣어야 하지 않을까?
 }
 
 void
@@ -127,9 +129,24 @@ fat_close (void) {
 
 void
 fat_create (void) {
+#ifdef DBG_FAT
+	printf("\n--fat_create start--\n");
+#endif
+
 	// Create FAT boot
 	fat_boot_create ();
 	fat_fs_init ();
+
+#ifdef DBG_FAT
+	printf("fat_create) fat len : %d, sector of last FAT entry : %d\n", fat_fs->fat_length, cluster_to_sector(fat_fs->fat_length));
+#endif
+
+	// Create bitmap for managing FAT entry status (empty/occupied)
+	fat_bitmap = bitmap_create(fat_fs->fat_length); // #ifdef DBG Q. 0번째는 ROOT_DIR_CLUSTER니까 1로 채워넣어야 하지 않을까?
+
+#ifdef DBG_FAT
+	printf("(fat_create) create fat_bitmap - fat_len %d, bitmap size %d\n", fat_fs->fat_length, bitmap_size(fat_bitmap));
+#endif
 
 	// Create FAT table
 	fat_fs->fat = calloc (fat_fs->fat_length, sizeof (cluster_t));
@@ -160,7 +177,12 @@ fat_boot_create (void) {
 	    .fat_sectors = fat_sectors,
 	    .root_dir_cluster = ROOT_DIR_CLUSTER,
 	};
-	// ex) total sectors 20160, fat_sectors = 157
+	// ex) total sectors 20160, fat_sectors = 157 -> pintos-mkdisk tmp.dsk 10 값에 따라 달라짐.
+	// tmp.dsk 2라면 
+
+#ifdef DBG_FAT
+	printf("(fat boot create) fat_sectors: %d, total sectors : %d, disk capa : %d\n", fat_sectors, disk_size (filesys_disk), filesys_disk->capacity);
+#endif
 }
 
 void
@@ -171,9 +193,14 @@ fat_fs_init (void) {
 	ASSERT(SECTORS_PER_CLUSTER == 1);
 
 	// how many clusters in the filesystem
-	fat_fs->fat_length = fat_fs->bs.fat_sectors * DISK_SECTOR_SIZE / sizeof (cluster_t); // ex) 157 sectors * 512 bytes/sector % 4 bytes/cluster = 20096 clusters in FAT
+	// fat_fs->fat_length = fat_fs->bs.fat_sectors * DISK_SECTOR_SIZE / sizeof (cluster_t); // ex) 157 sectors * 512 bytes/sector % 4 bytes/cluster = 20096 clusters in FAT
+	fat_fs->fat_length = sector_to_cluster(fat_fs->bs.total_sectors)-1;
 	// in which sector we can start to store FAT on the disk
 	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
+
+#ifdef DBG_FAT
+	printf("fat len : %d, sector of last FAT entry : %d\n", fat_fs->fat_length, cluster_to_sector(fat_fs->fat_length));
+#endif
 }
 
 /*----------------------------------------------------------------------------*/
