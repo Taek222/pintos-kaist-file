@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define DBG_FAT
+//#define DBG_FAT
 
 /* Should be less than DISK_SECTOR_SIZE */
 struct fat_boot {
@@ -36,11 +36,17 @@ void fat_fs_init (void);
 struct bitmap * fat_bitmap;
 
 cluster_t get_empty_cluster () {
-	size_t clst = bitmap_scan_and_flip(fat_bitmap, 0, 1, false) + 1; // index starts with 0, but cluster starts with 1
-	if (clst == BITMAP_ERROR)  
-		return 0;
-	else
-		return (cluster_t) clst;
+	// size_t clst = bitmap_scan_and_flip(fat_bitmap, 0, 1, false) + 1; // index starts with 0, but cluster starts with 1
+	// if (clst == BITMAP_ERROR)  
+	// 	return 0;
+	// else
+	// 	return (cluster_t) clst;
+	for (unsigned i = 1; i < fat_fs->fat_length; i++){
+		if (fat_fs->fat[i] == 0){
+			return i + 1;
+		}
+	}
+	return 0;
 }
 
 
@@ -161,6 +167,10 @@ fat_create (void) {
 
 	// Set up ROOT_DIR_CLST
 	fat_put (ROOT_DIR_CLUSTER, EOChain);
+	// ifdef DBG
+	for (unsigned i = 1; i < fat_fs->fat_length; i++){
+		fat_put (i, 0);
+	}
 
 	// Fill up ROOT_DIR_CLUSTER region with 0
 	uint8_t *buf = calloc (1, DISK_SECTOR_SIZE);
@@ -235,9 +245,17 @@ fat_create_chain (cluster_t clst) {
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
+	// while(clst && clst != EOChain){
+	// 	bitmap_set(fat_bitmap, clst - 1, false);
+	// 	clst = fat_get(clst);
+	// }
+	// if (pclst != 0){
+	// 	fat_put(pclst, EOChain);
+	// }
 	while(clst && clst != EOChain){
-		bitmap_set(fat_bitmap, clst - 1, false);
+		cluster_t oldclst = clst;
 		clst = fat_get(clst);
+		fat_put(oldclst, 0);
 	}
 	if (pclst != 0){
 		fat_put(pclst, EOChain);
@@ -248,8 +266,9 @@ fat_remove_chain (cluster_t clst, cluster_t pclst) {
 void
 fat_put (cluster_t clst, cluster_t val) {
 	/* TODO: Your code goes here. */
-	ASSERT(clst >= 1);
-	if(!bitmap_test(fat_bitmap, clst - 1)) bitmap_mark(fat_bitmap, clst - 1);
+	// ASSERT(clst >= 1);
+	// if(!bitmap_test(fat_bitmap, clst - 1)) bitmap_mark(fat_bitmap, clst - 1);
+	// fat_fs->fat[clst - 1] = val;
 	fat_fs->fat[clst - 1] = val;
 }
 
@@ -258,8 +277,7 @@ cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
 	ASSERT(clst >= 1);
-
-	if (clst > fat_fs->fat_length || !bitmap_test(fat_bitmap, clst - 1))
+	if (clst > fat_fs->fat_length) //|| !bitmap_test(fat_bitmap, clst - 1))
 		return 0; // error handling for fat_get(EOChain) or empty
 	return fat_fs->fat[clst - 1];
 }
