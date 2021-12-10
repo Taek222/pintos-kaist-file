@@ -109,28 +109,23 @@ filesys_done (void) {
  * or if internal memory allocation fails. */
 bool
 filesys_create (const char *name, off_t initial_size) {
+	bool success = false;
+
 	lock_acquire(&filesys_lock);
 
 	// Parse path and get directory
 	struct path* path = parse_filepath(name);
 	if(path->dircount==-1) { // create-empty, create-long
-		lock_release(&filesys_lock);
-		return false;
+		goto done_lock;
 	}
 	struct dir* dir = find_subdir(path->dirnames, path->dircount);
 	if(dir == NULL) {
-		dir_close (dir);
-		free_path(path);
-		lock_release(&filesys_lock);
-		return false;
+		goto done;
 	}
 
 	struct inode *inode = NULL; 
-	if(dir_lookup(dir, path->filename, &inode)){
-		dir_close (dir);
-		free_path(path);
-		lock_release(&filesys_lock);
-		return false; // create-exists (trying to create file that already exists)
+	if(dir_lookup(dir, path->filename, &inode)){ // create-exists (trying to create file that already exists)
+		goto done;
 	}
 
 	disk_sector_t inode_sector = 0;
@@ -138,10 +133,12 @@ filesys_create (const char *name, off_t initial_size) {
 
 	#ifdef EFILESYS
 	cluster_t clst = fat_create_chain(0);
-	ASSERT(clst >= 1);
+	if(clst == 0){ // FAT is full (= disk is full)
+		goto done;
+	}
 	inode_sector = cluster_to_sector(clst);
 
-	bool success = (dir != NULL			
+	success = (dir != NULL			
 			&& inode_create (inode_sector, initial_size, false)
 			&& dir_add (dir, path->filename, inode_sector));
 
@@ -153,7 +150,7 @@ filesys_create (const char *name, off_t initial_size) {
 
 	// create?
 	#else
-	bool success = (dir != NULL
+	success = (dir != NULL
 			&& free_map_allocate (1, &inode_sector)
 			&& inode_create (inode_sector, initial_size, false)
 			&& dir_add (dir, name, inode_sector));
@@ -161,9 +158,10 @@ filesys_create (const char *name, off_t initial_size) {
 		free_map_release (inode_sector, 1);
 	#endif
 
+done:
 	dir_close (dir);
 	free_path(path);
-
+done_lock:
 	lock_release(&filesys_lock);
 
 	return success;
@@ -217,39 +215,38 @@ filesys_open (const char *name) {
  * or if an internal memory allocation fails. */
 bool
 filesys_remove (const char *name) {
+	bool success = false;
+
 	lock_acquire(&filesys_lock);
 
 	// Parse path and get directory
 	struct path* path = parse_filepath(name);
 	if(path->dircount==-1) {
-		lock_release(&filesys_lock);
-		return false;
+		goto done_lock;
 	}
 	struct dir* dir = find_subdir(path->dirnames, path->dircount);
 	if(dir == NULL) {
-		dir_close (dir);
-		free_path(path);
-		lock_release(&filesys_lock);	
-		return false;
+		goto done;
 	}
 
 	// Check if the target is open (dir-rm-cwd)
 	struct inode *inode = NULL; 
 	dir_lookup(dir, path->filename, &inode);
-	if(inode == NULL || (inode_isdir(inode) && inode->open_cnt > 1)){ // only dir can't be closed when open (dir-rm-cwd vs syn-remove)
-		dir_close (dir);
-		free_path(path);
-		lock_release(&filesys_lock);
-		return false;
+	if(inode == NULL || (inode_isdir(inode) && inode->open_cnt > 2)){ // only dir can't be closed when open (dir-rm-cwd vs syn-remove)
+		goto done;
 	}
 
-	// struct dir *dir = dir_open_root ();
-	bool success = dir != NULL && dir_remove (dir, path->filename);
+	//printf("isDir? %d / openCnt %d\n", inode->data.isdir, inode->open_cnt);
 
+	// struct dir *dir = dir_open_root ();
+	success = dir != NULL && dir_remove (dir, path->filename);
+
+done: 
 	dir_close (dir);
 	free_path(path);
-
+done_lock:
 	lock_release(&filesys_lock);
+
 
 	return success;
 }

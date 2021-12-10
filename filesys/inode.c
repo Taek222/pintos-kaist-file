@@ -87,8 +87,8 @@ inode_create (disk_sector_t sector, off_t length, bool isdir) {
 
 	ASSERT (length >= 0);
 
-	if(sector >= filesys_disk->capacity)
-		return false;
+	// if(sector >= filesys_disk->capacity)
+	// 	return false;
 
 	/* If this assertion fails, the inode structure is not exactly
 	 * one sector in size, and you should fix that. */
