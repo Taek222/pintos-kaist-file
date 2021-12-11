@@ -137,7 +137,7 @@ dir_get_inode (struct dir *dir) {
  * if EP is non-null, and sets *OFSP to the byte offset of the
  * directory entry if OFSP is non-null.
  * otherwise, returns false and ignores EP and OFSP. */
-static bool
+bool
 lookup (const struct dir *dir, const char *name,
 		struct dir_entry *ep, off_t *ofsp) {
 	struct dir_entry e;
@@ -174,9 +174,11 @@ dir_lookup (const struct dir *dir, const char *name,
 		if (strcmp("lazy", e.lazy)) //lazy symlink update
 		{
 			dir_lookup(dir_open(inode_open(e.inode_sector)), e.lazy, inode);
-			e.inode_sector = inode_get_inumber(*inode);
-			strlcpy (e.lazy, "lazy", sizeof e.lazy);
-			return *inode != NULL;
+			if(*inode != NULL){
+				e.inode_sector = inode_get_inumber(*inode);
+				strlcpy (e.lazy, "lazy", sizeof e.lazy);
+				return *inode != NULL;
+			}
 		}
 		*inode = inode_open (e.inode_sector);
 	}
@@ -310,13 +312,23 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1]) {
 void set_entry_symlink(struct dir* dir, const char *name, bool issym){
 	struct dir_entry e;
 	off_t ofs;
-	lookup(dir, name, &e, &ofs);
+	for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e; ofs += sizeof e){
+		if (e.in_use && !strcmp (name, e.name)){
+			break;
+		}
+	}
 	e.is_sym = issym;
+	inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 }
 // set dir entry's lazy symlink target info
 void set_entry_lazytar(struct dir* dir, const char *name, const char *tar){
 	struct dir_entry e;
 	off_t ofs;
-	lookup(dir, name, &e, &ofs);
+	for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e; ofs += sizeof e){
+		if (e.in_use && !strcmp (name, e.name)){
+			break;
+		}
+	}
 	strlcpy(e.lazy, tar, sizeof e.lazy);
+	inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 }

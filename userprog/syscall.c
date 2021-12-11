@@ -682,8 +682,16 @@ symlink (const char* target, const char* linkpath) {
 	//add to link path
 	dir_add(subdir_link, path_link->filename, inode_get_inumber(inode));
 	set_entry_symlink(subdir_link, path_link->filename, true);
-	if (lazy){
+	if (lazy){ // create a lazy link to some file
 		set_entry_lazytar(subdir_link, path_link->filename, path_tar->filename);
+	}
+	else{ // if target is a lazy link to some file; propagate lazy link
+		struct dir_entry target_entry;
+		off_t ofs;
+		lookup(subdir_tar, path_tar->filename, &target_entry, &ofs);
+		if(strcmp("lazy", target_entry.lazy)){
+			set_entry_lazytar(subdir_link, path_link->filename, target_entry.lazy);
+		}
 	}
 
 	dir_close (subdir_link);

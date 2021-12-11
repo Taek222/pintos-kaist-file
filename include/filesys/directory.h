@@ -58,4 +58,6 @@ void set_current_directory(struct dir *dir);
 void set_entry_symlink(struct dir*, const char *name, bool);
 void set_entry_lazytar(struct dir*, const char *name, const char *tar);
 
+bool lookup (const struct dir *dir, const char *name, struct dir_entry *ep, off_t *ofsp);
+
 #endif /* filesys/directory.h */
