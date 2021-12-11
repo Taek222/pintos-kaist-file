@@ -107,7 +107,8 @@ inode_create (disk_sector_t sector, off_t length, bool isdir) {
 		// 	return false; // FAT already occupied
 		// }
 
-		if(sectors == 0) disk_inode->start = clst;
+		// if(sectors == 0) disk_inode->start = clst;
+		if(sectors == 0) disk_inode->start = cluster_to_sector(fat_create_chain(newclst));
 
 		int i;
 		for (i = 0; i < sectors; i++){
