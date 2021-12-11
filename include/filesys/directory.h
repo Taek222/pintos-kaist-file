@@ -17,6 +17,16 @@
 
 struct inode;
 
+/* A directory. */
+struct dir {
+	struct inode *inode;                /* Backing store. */
+	off_t pos;                          /* Current position. */ // dir_readdir에서 사용; 어느 entry까지 읽었나
+
+	//project 4-2 : for casting to 'struct file' (syscall close)
+	bool deny_write; // not used
+	int dupCount; // not used
+};
+
 /* A single directory entry. */
 struct dir_entry {
 	disk_sector_t inode_sector;         /* Sector number of header. */
