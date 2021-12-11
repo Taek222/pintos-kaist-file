@@ -80,6 +80,7 @@ filesys_init (bool format) {
 		do_format ();
 
 	fat_open ();
+	init_fat_bitmap();
 #else
 	/* Original FS */
 	free_map_init ();

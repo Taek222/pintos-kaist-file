@@ -72,6 +72,14 @@ fat_init (void) {
 	#endif
 }
 
+void init_fat_bitmap(void){
+	for(int clst = 0; clst < fat_fs->fat_length; clst++){
+		// FAT occupied with EOC or any value (next cluster)
+		if(fat_fs->fat[clst])
+			bitmap_set(fat_bitmap, clst, true);
+	}
+}
+
 void
 fat_open (void) {
 	fat_fs->fat = calloc (fat_fs->fat_length, sizeof (cluster_t));
